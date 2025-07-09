@@ -49,6 +49,9 @@ export default function DISCTest() {
       <main style={{ padding: 24 }}>
         <h2>{template.name} – Results</h2>
         <p>{result.interpretation}</p>
+        <ul>
+          {result.tips.map((t,i)=>(<li key={i}>{t}</li>))}
+        </ul>
         <button onClick={() => setResult(null)}>Retake</button>
       </main>
     );

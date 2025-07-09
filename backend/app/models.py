@@ -64,6 +64,7 @@ class TestAttempt(SQLModel, table=True):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     raw_score: Optional[float] = None
     normalized_score: Optional[float] = None
+    interpretation: Optional[str] = None
 
     responses: list["Response"] = Relationship(back_populates="attempt")
 

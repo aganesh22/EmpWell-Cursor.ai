@@ -88,6 +88,7 @@ export interface TestResult {
   raw_score: number;
   normalized_score: number;
   interpretation: string;
+  tips: string[];
 }
 
 export function submitTest(token: string, key: string, answers: number[]) {

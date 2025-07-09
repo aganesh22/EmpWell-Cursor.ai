@@ -68,3 +68,4 @@ class TestResult(SQLModel):
     raw_score: float
     normalized_score: float
     interpretation: str
+    tips: list[str] = []

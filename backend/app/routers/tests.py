@@ -3,6 +3,10 @@ from __future__ import annotations
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
+from io import BytesIO
+from reportlab.lib.pagesizes import letter
+from reportlab.pdfgen import canvas
 from sqlmodel import Session, select
 
 from backend.app.database import get_session
@@ -63,11 +67,18 @@ def submit_test(key: str, answers: List[int],  # Expect list of selected values 
             interp = "Moderate wellbeing"
         else:
             interp = "High wellbeing"
+        tips = [
+            "Consider small daily activities that bring you joy.",
+            "Engage in relaxation techniques like deep breathing or meditation.",
+            "Maintain a consistent sleep schedule to improve restfulness.",
+        ]
+
         attempt.raw_score = raw_score
         attempt.normalized_score = normalized
+        attempt.interpretation = interp
         session.add(attempt)
         session.commit()
-        return TestResult(raw_score=raw_score, normalized_score=normalized, interpretation=interp)
+        return TestResult(raw_score=raw_score, normalized_score=normalized, interpretation=interp, tips=tips)
 
     elif key == "mbti":
         # accumulate per dimension
@@ -89,11 +100,24 @@ def submit_test(key: str, answers: List[int],  # Expect list of selected values 
             for pair, score in dims.items()
         ])
         interp = f"Your personality type: {type_letters}"
+        tips_map = {
+            "I": "Schedule alone-time to recharge.",
+            "E": "Engage with groups and collaborative activities.",
+            "S": "Ground ideas with practical steps.",
+            "N": "Embrace creative brainstorming sessions.",
+            "T": "List pros and cons for decisions.",
+            "F": "Check in with your feelings when deciding.",
+            "J": "Plan your week with clear to-dos.",
+            "P": "Leave room for spontaneity in plans.",
+        }
+        tips = [tips_map.get(letter, "") for letter in type_letters]
+
         attempt.raw_score = 0
         attempt.normalized_score = 0
+        attempt.interpretation = interp
         session.add(attempt)
         session.commit()
-        return TestResult(raw_score=0, normalized_score=0, interpretation=interp)
+        return TestResult(raw_score=0, normalized_score=0, interpretation=interp, tips=[t for t in tips if t])
 
     elif key == "disc":
         cats = {"D": 0, "I": 0, "S": 0, "C": 0}
@@ -102,11 +126,57 @@ def submit_test(key: str, answers: List[int],  # Expect list of selected values 
             cats[letter] += val
         dominant = max(cats, key=cats.get)
         interp = f"Your dominant DISC style: {dominant}"
+        tips_disc = {
+            "D": "Set ambitious goals and track progress.",
+            "I": "Leverage your social network for support.",
+            "S": "Create stable routines and support others.",
+            "C": "Establish clear standards and processes.",
+        }
         attempt.raw_score = 0
         attempt.normalized_score = 0
+        attempt.interpretation = interp
         session.add(attempt)
         session.commit()
-        return TestResult(raw_score=0, normalized_score=0, interpretation=interp)
+        return TestResult(raw_score=0, normalized_score=0, interpretation=interp, tips=[tips_disc[dominant]])
 
     else:
         raise HTTPException(status_code=400, detail="Scoring not implemented")
+
+
+@router.get("/attempts/{attempt_id}/report", response_class=StreamingResponse)
+def download_report(attempt_id: int, user=Depends(get_current_user), session: Session = Depends(get_session)):
+    attempt = session.get(TestAttempt, attempt_id)
+    if not attempt:
+        raise HTTPException(status_code=404, detail="Attempt not found")
+
+    # Only the owner or admin can download
+    if attempt.user_id != user.id and user.role != "admin":
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Not authorized")
+
+    template = session.get(TestTemplate, attempt.template_id)
+
+    buffer = BytesIO()
+    c = canvas.Canvas(buffer, pagesize=letter)
+    width, height = letter
+
+    y = height - 50
+    c.setFont("Helvetica-Bold", 16)
+    c.drawString(50, y, f"{template.name} Result Report")
+    y -= 30
+    c.setFont("Helvetica", 12)
+    c.drawString(50, y, f"User ID: {attempt.user_id}")
+    y -= 20
+    c.drawString(50, y, f"Date: {attempt.created_at.strftime('%Y-%m-%d')}")
+    y -= 30
+    c.drawString(50, y, f"Interpretation: {attempt.interpretation or 'N/A'}")
+    y -= 30
+
+    if attempt.normalized_score is not None:
+        c.drawString(50, y, f"Score: {attempt.normalized_score:.2f}")
+        y -= 30
+
+    c.showPage()
+    c.save()
+
+    buffer.seek(0)
+    return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=report_{attempt_id}.pdf"})

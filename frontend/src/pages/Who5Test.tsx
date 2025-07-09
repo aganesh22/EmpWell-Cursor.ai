@@ -53,6 +53,11 @@ export default function Who5Test() {
         <p>Raw score: {result.raw_score}</p>
         <p>Normalized score: {result.normalized_score}</p>
         <p>Interpretation: {result.interpretation}</p>
+        <ul>
+          {result.tips.map((t, i) => (
+            <li key={i}>{t}</li>
+          ))}
+        </ul>
         <button onClick={() => setResult(null)}>Retake</button>
       </main>
     );
