@@ -1,7 +1,9 @@
-from __future__ import annotations
+THIS SHOULD BE A LINTER ERRORfrom __future__ import annotations
 
 from typing import List, Dict, Any
 import json
+import logging
+from datetime import datetime
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
@@ -18,6 +20,13 @@ from backend.app.core.branching import (
     create_rules_processor,
     create_score_calculator,
     create_progress_tracker
+)
+from backend.app.core.standardized_tests import (
+    StandardizedTestRegistry,
+    WHO5WellbeingIndex,
+    GAD7AnxietyScale,
+    calculate_who5_score,
+    calculate_gad7_score
 )
 
 router = APIRouter(prefix="/tests", tags=["tests"])
@@ -429,24 +438,42 @@ def submit_test(key: str, answers: List[int],
 
     # Legacy scoring for backward compatibility
     if key == "who5":
-        if normalized_score < 50:
-            interp = "Low wellbeing (possible depression)"
-        elif normalized_score < 75:
-            interp = "Moderate wellbeing"
-        else:
-            interp = "High wellbeing"
-        tips = [
-            "Consider small daily activities that bring you joy.",
-            "Engage in relaxation techniques like deep breathing or meditation.",
-            "Maintain a consistent sleep schedule to improve restfulness.",
-        ]
+        # Use standardized WHO-5 implementation for better accuracy
+        try:
+            who5_result = calculate_who5_score(answers)
+            attempt.raw_score = who5_result.raw_score
+            attempt.normalized_score = who5_result.percentage_score
+            attempt.interpretation = who5_result.description
+            session.add(attempt)
+            session.commit()
+            
+            return TestResult(
+                raw_score=who5_result.raw_score,
+                normalized_score=who5_result.percentage_score,
+                interpretation=who5_result.description,
+                tips=who5_result.recommendations[:3]  # Limit to 3 for legacy compatibility
+            )
+        except Exception as e:
+            logger.warning(f"Standardized WHO-5 scoring failed, using legacy: {e}")
+            # Fallback to legacy scoring
+            if normalized_score < 50:
+                interp = "Low wellbeing (possible depression)"
+            elif normalized_score < 75:
+                interp = "Moderate wellbeing"
+            else:
+                interp = "High wellbeing"
+            tips = [
+                "Consider small daily activities that bring you joy.",
+                "Engage in relaxation techniques like deep breathing or meditation.",
+                "Maintain a consistent sleep schedule to improve restfulness.",
+            ]
 
-        attempt.raw_score = raw_score
-        attempt.normalized_score = normalized_score
-        attempt.interpretation = interp
-        session.add(attempt)
-        session.commit()
-        return TestResult(raw_score=raw_score, normalized_score=normalized_score, interpretation=interp, tips=tips)
+            attempt.raw_score = raw_score
+            attempt.normalized_score = normalized_score
+            attempt.interpretation = interp
+            session.add(attempt)
+            session.commit()
+            return TestResult(raw_score=raw_score, normalized_score=normalized_score, interpretation=interp, tips=tips)
 
     else:
         # For other tests, use the calculated scores
@@ -484,6 +511,220 @@ def search_tests(query: str):
             query_lower in test.get("key", "").lower())
     ]
     return matching_tests
+
+
+# --- Standardized Tests Endpoints ---
+
+@router.get("/standardized", response_model=List[Dict[str, Any]])
+def list_standardized_tests():
+    """Get all available standardized psychological tests"""
+    return StandardizedTestRegistry.list_tests()
+
+
+@router.get("/standardized/{key}", response_model=Dict[str, Any])
+def get_standardized_test(key: str):
+    """Get details for a specific standardized test"""
+    test_class = StandardizedTestRegistry.get_test(key)
+    if not test_class:
+        raise HTTPException(status_code=404, detail="Standardized test not found")
+    
+    return {
+        "key": test_class.KEY,
+        "name": test_class.NAME,
+        "version": test_class.VERSION,
+        "administration_time": test_class.ADMINISTRATION_TIME,
+        "question_count": len(test_class.QUESTIONS),
+        "questions": test_class.get_question_data() if hasattr(test_class, 'get_question_data') else test_class.QUESTIONS,
+        "description": f"Standardized {test_class.NAME} assessment",
+        "scoring_info": {
+            "type": "standardized",
+            "validated": True,
+            "normative_data": True
+        }
+    }
+
+
+@router.post("/standardized/{key}/submit", response_model=Dict[str, Any])
+def submit_standardized_test(
+    key: str,
+    responses: List[int],
+    user=Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """Submit responses for a standardized test and get detailed results"""
+    test_class = StandardizedTestRegistry.get_test(key)
+    if not test_class:
+        raise HTTPException(status_code=404, detail="Standardized test not found")
+    
+    try:
+        # Validate responses
+        if hasattr(test_class, 'validate_response_set'):
+            is_valid, errors = test_class.validate_response_set(responses)
+            if not is_valid:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid responses: {'; '.join(errors)}"
+                )
+        
+        # Calculate score using the standardized algorithm
+        result = test_class.calculate_score(responses)
+        
+        # Save to database for tracking
+        try:
+            # Get or create template
+            template = session.exec(
+                select(TestTemplate).where(TestTemplate.key == key)
+            ).first()
+            
+            if not template:
+                template = test_class.create_database_template(session)
+            
+            # Create attempt
+            attempt = TestAttempt(
+                template_id=template.id,
+                user_id=user.id,
+                raw_score=result.raw_score,
+                normalized_score=result.percentage_score,
+                interpretation=result.description
+            )
+            session.add(attempt)
+            session.commit()
+            session.refresh(attempt)
+            
+            # Save individual responses
+            questions = session.exec(
+                select(Question)
+                .where(Question.template_id == template.id)
+                .order_by(Question.order)
+            ).all()
+            
+            for i, response_value in enumerate(responses):
+                if i < len(questions):
+                    response = Response(
+                        attempt_id=attempt.id,
+                        question_id=questions[i].id,
+                        value=response_value
+                    )
+                    session.add(response)
+            
+            session.commit()
+            
+        except Exception as e:
+            logger.warning(f"Failed to save standardized test attempt: {e}")
+            # Continue with result even if database save fails
+        
+        # Return comprehensive results
+        return {
+            "test_key": key,
+            "test_name": test_class.NAME,
+            "version": test_class.VERSION,
+            "completion_date": datetime.utcnow().isoformat(),
+            "raw_score": result.raw_score,
+            "percentage_score": result.percentage_score,
+            "interpretation": result.interpretation.value,
+            "risk_level": result.risk_level.value,
+            "description": result.description,
+            "recommendations": result.recommendations,
+            "clinical_considerations": result.clinical_considerations,
+            "follow_up_suggested": result.follow_up_suggested,
+            "normative_percentile": result.normative_percentile,
+            "attempt_id": attempt.id if 'attempt' in locals() else None
+        }
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Error processing standardized test {key}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error processing test submission"
+        )
+
+
+@router.get("/standardized/{key}/questions", response_model=List[Dict[str, Any]])
+def get_standardized_test_questions(key: str):
+    """Get questions for a standardized test"""
+    test_class = StandardizedTestRegistry.get_test(key)
+    if not test_class:
+        raise HTTPException(status_code=404, detail="Standardized test not found")
+    
+    if hasattr(test_class, 'get_question_data'):
+        return test_class.get_question_data()
+    else:
+        return test_class.QUESTIONS
+
+
+@router.post("/standardized/init-templates")
+def initialize_standardized_templates(
+    session: Session = Depends(get_session),
+    current_user=Depends(get_current_user)
+):
+    """Initialize all standardized test templates in the database (admin only)"""
+    if current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only administrators can initialize test templates"
+        )
+    
+    try:
+        templates = StandardizedTestRegistry.initialize_all_templates(session)
+        
+        return {
+            "message": f"Successfully initialized {len(templates)} standardized test templates",
+            "templates": [
+                {
+                    "key": template.key,
+                    "name": template.name,
+                    "id": template.id
+                }
+                for template in templates
+            ]
+        }
+        
+    except Exception as e:
+        logger.error(f"Error initializing standardized templates: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error initializing test templates"
+        )
+
+
+@router.get("/standardized/{key}/interpretation/{score}")
+def get_score_interpretation(key: str, score: float):
+    """Get interpretation for a specific score on a standardized test"""
+    test_class = StandardizedTestRegistry.get_test(key)
+    if not test_class:
+        raise HTTPException(status_code=404, detail="Standardized test not found")
+    
+    # Create dummy responses to get interpretation
+    if key == "who5":
+        # WHO-5 percentage score, convert back to responses
+        raw_score = int(score * 25 / 100)
+        dummy_responses = [raw_score // 5] * 5  # Approximate equal distribution
+    elif key == "gad7":
+        # GAD-7 raw score
+        raw_score = int(score)
+        dummy_responses = [raw_score // 7] * 7  # Approximate equal distribution
+    else:
+        raise HTTPException(status_code=400, detail="Score interpretation not available for this test")
+    
+    try:
+        result = test_class.calculate_score(dummy_responses)
+        return {
+            "score": score,
+            "interpretation": result.interpretation.value,
+            "risk_level": result.risk_level.value,
+            "description": result.description,
+            "normative_percentile": result.normative_percentile
+        }
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Error interpreting score: {e}"
+        )
 
 
 # New Branching Logic Endpoints
