@@ -133,6 +133,10 @@ export function loginWithGoogle(id_token: string) {
   return api.post("/auth/google", { id_token });
 }
 
+export function loginWithAzure(access_token: string) {
+  return api.post("/auth/azure", { access_token });
+}
+
 export interface User {
   id: number;
   email: string;

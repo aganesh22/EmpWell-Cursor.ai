@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import secrets
+import requests
 from google.oauth2 import id_token as google_id_token
 from google.auth.transport import requests as google_requests
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -37,6 +38,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = D
 # --- Google Workspace SSO ---
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
+AZURE_CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
+AZURE_TENANT_ID = os.getenv("AZURE_TENANT_ID")
 
 
 @router.post("/google", response_model=schemas.Token)
@@ -60,6 +63,51 @@ def google_sso(payload: schemas.GoogleToken, session: Session = Depends(get_sess
         # Auto-provision user with random password (not used).
         random_pw = secrets.token_urlsafe(16)
         user = crud.create_user(session, email=email, full_name=idinfo.get("name"), password=random_pw)
+
+    token = create_access_token(user.id)
+    return schemas.Token(access_token=token)
+
+
+# --- Azure AD SSO ---
+
+@router.post("/azure", response_model=schemas.Token)
+def azure_sso(payload: schemas.AzureToken, session: Session = Depends(get_session)):
+    """Accept an access_token from Azure AD and exchange for platform JWT."""
+
+    if not AZURE_CLIENT_ID or not AZURE_TENANT_ID:
+        raise HTTPException(status_code=500, detail="Azure AD SSO not configured")
+
+    try:
+        # Verify the access token with Microsoft Graph API
+        graph_url = "https://graph.microsoft.com/v1.0/me"
+        headers = {"Authorization": f"Bearer {payload.access_token}"}
+        
+        response = requests.get(graph_url, headers=headers)
+        if response.status_code != 200:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Azure token")
+        
+        user_info = response.json()
+        
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Azure token") from exc
+
+    email = user_info.get("mail") or user_info.get("userPrincipalName")
+    if not email:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Azure token missing email")
+
+    user = crud.get_user_by_email(session, email=email)
+    if not user:
+        # Auto-provision user with Azure details
+        display_name = user_info.get("displayName")
+        department = user_info.get("department")
+        random_pw = secrets.token_urlsafe(16)
+        user = crud.create_user(
+            session, 
+            email=email, 
+            full_name=display_name, 
+            password=random_pw,
+            department=department
+        )
 
     token = create_access_token(user.id)
     return schemas.Token(access_token=token)
