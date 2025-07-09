@@ -28,3 +28,7 @@ export function loginUser({ email, password }: LoginPayload) {
     headers: { "Content-Type": "application/x-www-form-urlencoded" },
   });
 }
+
+export function loginWithGoogle(id_token: string) {
+  return api.post("/auth/google", { id_token });
+}

@@ -1,12 +1,40 @@
+/// <reference types="vite/client" />
 import React, { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
-import { loginUser } from "../lib/api";
+import { loginUser, loginWithGoogle } from "../lib/api";
 
 export default function Login() {
   const navigate = useNavigate();
   const mutation = useMutation({
     mutationFn: loginUser,
+    onSuccess: (data) => {
+      localStorage.setItem("token", data.data.access_token);
+      navigate("/");
+    },
+  });
+
+  // Google One Tap
+  React.useEffect(() => {
+    /* global google */
+    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
+    if (!clientId || !(window as any).google?.accounts) return;
+
+    (window as any).google.accounts.id.initialize({
+      client_id: clientId,
+      callback: (response: any) => {
+        googleMutation.mutate(response.credential);
+      },
+    });
+
+    (window as any).google.accounts.id.renderButton(
+      document.getElementById("google-btn"),
+      { theme: "outline", size: "large" }
+    );
+  }, []);
+
+  const googleMutation = useMutation({
+    mutationFn: loginWithGoogle,
     onSuccess: (data) => {
       localStorage.setItem("token", data.data.access_token);
       navigate("/");
@@ -38,6 +66,7 @@ export default function Login() {
         </button>
       </form>
       {mutation.isError && <p style={{ color: "red" }}>Invalid credentials</p>}
+      <div id="google-btn" style={{ marginTop: 16 }}></div>
       <p style={{ marginTop: 16 }}>
         Don't have an account? <Link to="/register">Register</Link>
       </p>

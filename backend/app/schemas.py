@@ -28,3 +28,7 @@ class UserRead(SQLModel):
 class Token(SQLModel):
     access_token: str
     token_type: str = "bearer"
+
+
+class GoogleToken(SQLModel):
+    id_token: str
