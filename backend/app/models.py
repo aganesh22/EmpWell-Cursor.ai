@@ -51,6 +51,8 @@ class Question(SQLModel, table=True):
     min_value: int = 0
     max_value: int = 5
     weight: float = 1.0
+    dimension_pair: str | None = Field(default=None, max_length=2)  # e.g., "IE", "SN", "D" etc.
+    positive_letter: str | None = Field(default=None, max_length=1)
 
     template: TestTemplate = Relationship(back_populates="questions")
 

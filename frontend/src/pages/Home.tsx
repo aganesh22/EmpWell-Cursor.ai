@@ -17,7 +17,7 @@ export default function Home() {
       <h1>Corporate Wellbeing Platform</h1>
       {token ? (
         <p>
-          You are logged in. <Link to="/test/who5">Take WHO-5 Test</Link> | <Link to="/admin">Admin Dashboard</Link>
+          You are logged in. <Link to="/test/who5">WHO-5</Link> | <Link to="/test/mbti">MBTI</Link> | <Link to="/test/disc">DISC</Link> | <Link to="/admin">Admin</Link>
         </p>
       ) : (
         <p>

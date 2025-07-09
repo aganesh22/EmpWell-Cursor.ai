@@ -55,19 +55,58 @@ def submit_test(key: str, answers: List[int],  # Expect list of selected values 
         raw_score += val * q.weight
         session.add(Response(attempt_id=attempt.id, question_id=q.id, value=val))
 
-    # WHO-5 scoring
-    normalized = raw_score * 4  # percentage 0-100
-    # interpretation
-    if normalized < 50:
-        interp = "Low wellbeing (possible depression)"
-    elif normalized < 75:
-        interp = "Moderate wellbeing"
+    if key == "who5":
+        normalized = raw_score * 4  # 0-100
+        if normalized < 50:
+            interp = "Low wellbeing (possible depression)"
+        elif normalized < 75:
+            interp = "Moderate wellbeing"
+        else:
+            interp = "High wellbeing"
+        attempt.raw_score = raw_score
+        attempt.normalized_score = normalized
+        session.add(attempt)
+        session.commit()
+        return TestResult(raw_score=raw_score, normalized_score=normalized, interpretation=interp)
+
+    elif key == "mbti":
+        # accumulate per dimension
+        dims = {"IE": 0, "SN": 0, "TF": 0, "JP": 0}
+        for q, val in zip(questions, answers):
+            pair = q.dimension_pair
+            if not pair:
+                continue
+            positivity = q.positive_letter
+            # if val <=3 choose positive else other letter
+            if val <= 3:
+                chosen = positivity
+            else:
+                chosen = pair.replace(positivity, "")
+            dims[pair] += 1 if chosen == positivity else -1
+
+        type_letters = "".join([
+            (pair[0] if score > 0 else pair[1]) if pair in dims else "?"
+            for pair, score in dims.items()
+        ])
+        interp = f"Your personality type: {type_letters}"
+        attempt.raw_score = 0
+        attempt.normalized_score = 0
+        session.add(attempt)
+        session.commit()
+        return TestResult(raw_score=0, normalized_score=0, interpretation=interp)
+
+    elif key == "disc":
+        cats = {"D": 0, "I": 0, "S": 0, "C": 0}
+        for q, val in zip(questions, answers):
+            letter = q.positive_letter or ""
+            cats[letter] += val
+        dominant = max(cats, key=cats.get)
+        interp = f"Your dominant DISC style: {dominant}"
+        attempt.raw_score = 0
+        attempt.normalized_score = 0
+        session.add(attempt)
+        session.commit()
+        return TestResult(raw_score=0, normalized_score=0, interpretation=interp)
+
     else:
-        interp = "High wellbeing"
-
-    attempt.raw_score = raw_score
-    attempt.normalized_score = normalized
-    session.add(attempt)
-    session.commit()
-
-    return TestResult(raw_score=raw_score, normalized_score=normalized, interpretation=interp)
+        raise HTTPException(status_code=400, detail="Scoring not implemented")

@@ -5,6 +5,8 @@ import Login from "./Login";
 import Register from "./Register";
 import AdminDashboard from "./AdminDashboard";
 import Who5Test from "./Who5Test";
+import MBTITest from "./MBTITest";
+import DISCTest from "./DISCTest";
 
 export default function App() {
   return (
@@ -14,6 +16,8 @@ export default function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/test/who5" element={<Who5Test />} />
+      <Route path="/test/mbti" element={<MBTITest />} />
+      <Route path="/test/disc" element={<DISCTest />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );
