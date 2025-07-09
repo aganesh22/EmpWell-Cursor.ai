@@ -9,6 +9,8 @@ import MBTITest from "./MBTITest";
 import DISCTest from "./DISCTest";
 import AdminAnalytics from "./AdminAnalytics";
 import ResourcesPage from "./Resources";
+import TestLibrary from "./TestLibrary";
+import TestTaker from "./TestTaker";
 
 export default function App() {
   return (
@@ -18,6 +20,9 @@ export default function App() {
       <Route path="/register" element={<Register />} />
       <Route path="/admin" element={<AdminDashboard />} />
       <Route path="/admin/analytics" element={<AdminAnalytics />} />
+      <Route path="/tests" element={<TestLibrary />} />
+      <Route path="/test/:testKey" element={<TestTaker />} />
+      {/* Legacy test routes for backward compatibility */}
       <Route path="/test/who5" element={<Who5Test />} />
       <Route path="/test/mbti" element={<MBTITest />} />
       <Route path="/test/disc" element={<DISCTest />} />

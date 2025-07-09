@@ -1,11 +1,15 @@
 /// <reference types="vite/client" />
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useMutation } from "@tanstack/react-query";
 import { loginUser, loginWithGoogle } from "../lib/api";
+import { GoogleAuth } from "../lib/google-auth";
 
 export default function Login() {
   const navigate = useNavigate();
+  const googleButtonRef = useRef<HTMLDivElement>(null);
+  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
+
   const mutation = useMutation({
     mutationFn: loginUser,
     onSuccess: (data) => {
@@ -14,32 +18,59 @@ export default function Login() {
     },
   });
 
-  // Google One Tap
-  React.useEffect(() => {
-    /* global google */
-    const clientId = import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined;
-    if (!clientId || !(window as any).google?.accounts) return;
-
-    (window as any).google.accounts.id.initialize({
-      client_id: clientId,
-      callback: (response: any) => {
-        googleMutation.mutate(response.credential);
-      },
-    });
-
-    (window as any).google.accounts.id.renderButton(
-      document.getElementById("google-btn"),
-      { theme: "outline", size: "large" }
-    );
-  }, []);
-
   const googleMutation = useMutation({
     mutationFn: loginWithGoogle,
     onSuccess: (data) => {
       localStorage.setItem("token", data.data.access_token);
+      setIsGoogleLoading(false);
       navigate("/");
     },
+    onError: () => {
+      setIsGoogleLoading(false);
+    },
   });
+
+  // Enhanced Google SSO setup
+  useEffect(() => {
+    const setupGoogleAuth = async () => {
+      const googleAuth = GoogleAuth.getInstance();
+      
+      if (!googleAuth.isConfigured()) {
+        console.log("Google SSO not configured - skipping");
+        return;
+      }
+
+      try {
+        await googleAuth.initialize();
+        
+        // Render the Google Sign-In button
+        if (googleButtonRef.current) {
+          googleAuth.renderSignInButton(googleButtonRef.current, {
+            theme: 'outline',
+            size: 'large',
+            text: 'signin_with',
+            shape: 'rectangular',
+          });
+        }
+
+        // Listen for Google sign-in events
+        const handleGoogleSignIn = (event: CustomEvent) => {
+          setIsGoogleLoading(true);
+          googleMutation.mutate(event.detail.credential);
+        };
+
+        window.addEventListener('google-signin', handleGoogleSignIn as EventListener);
+        
+        return () => {
+          window.removeEventListener('google-signin', handleGoogleSignIn as EventListener);
+        };
+      } catch (error) {
+        console.error("Failed to initialize Google Auth:", error);
+      }
+    };
+
+    setupGoogleAuth();
+  }, [googleMutation]);
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -66,7 +97,15 @@ export default function Login() {
         </button>
       </form>
       {mutation.isError && <p style={{ color: "red" }}>Invalid credentials</p>}
-      <div id="google-btn" style={{ marginTop: 16 }}></div>
+      {googleMutation.isError && <p style={{ color: "red" }}>Google sign-in failed</p>}
+      
+      <div style={{ marginTop: 20, textAlign: 'center' }}>
+        <div style={{ margin: '16px 0', fontSize: '14px', color: '#666' }}>or</div>
+        <div ref={googleButtonRef} style={{ display: 'flex', justifyContent: 'center' }}>
+          {isGoogleLoading && <p>Signing in with Google...</p>}
+        </div>
+      </div>
+      
       <p style={{ marginTop: 16 }}>
         Don't have an account? <Link to="/register">Register</Link>
       </p>

@@ -1,5 +1,6 @@
 /// <reference types="vite/client" />
 import axios from "axios";
+import { getAllTests, getTestByKey } from './test-library';
 
 // Use mock API in development environments without backend
 const API_BASE_URL = import.meta.env.VITE_API_URL ?? "http://localhost:8000";
@@ -67,14 +68,33 @@ if (IS_MOCK_ENV) {
         return Promise.resolve({ data: MOCK_RESOURCES, status: 200 });
       }
       if (url.includes("/tests/")) {
+        const pathParts = url.split("/tests/");
+        if (pathParts[1] && pathParts[1] !== '') {
+          // Get specific test
+          const testKey = pathParts[1];
+          const mockTest = getTestByKey(testKey);
+          if (mockTest) {
+            return Promise.resolve({ data: mockTest, status: 200 });
+          }
+        } else {
+          // List all tests
+          const allTests = getAllTests();
+          return Promise.resolve({ data: allTests, status: 200 });
+        }
+        
+        // Fallback for unknown tests
         const mockTest = {
           key: "who5",
           name: "WHO-5 Wellbeing Index",
           description: "Measure current mental wellbeing",
+          category: "wellbeing",
+          duration_minutes: 2,
+          branching_enabled: false,
           questions: [
-            { id: 1, text: "I have felt cheerful and in good spirits", order: 1, min_value: 0, max_value: 5 },
-            { id: 2, text: "I have felt calm and relaxed", order: 2, min_value: 0, max_value: 5 }
-          ]
+            { id: 1, text: "I have felt cheerful and in good spirits", order: 1, min_value: 0, max_value: 5, weight: 1.0, question_type: "likert", required: true, reverse_scored: false }
+          ],
+          scoring_rules: { type: "simple_sum" },
+          interpretation_guide: { score_ranges: [], recommendations: [], risk_indicators: [] }
         };
         return Promise.resolve({ data: mockTest, status: 200 });
       }
