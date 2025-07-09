@@ -12,7 +12,7 @@ from pydantic import BaseModel, Field
 from backend.app.database import get_session
 from backend.app.models import TestTemplate, TestAttempt, Response, User
 from backend.app.core.disc_assessment import DISCAssessment, DISCResult
-from backend.app.api.auth import get_current_user
+from backend.app.deps import get_current_user
 
 router = APIRouter(prefix="/disc", tags=["DISC Assessment"])
 
