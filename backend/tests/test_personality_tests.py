@@ -80,8 +80,8 @@ class TestPersonalityTest:
         all_agree = [5] * 60
         result = PersonalityTest.calculate_personality_type(all_agree)
         
-        # Should be ENTJ (all first letters of each dimension)
-        assert result.personality_type == PersonalityType.ENTJ
+        # Should be ESTJ (based on question distribution: 8 E/S/T/J vs 7 I/N/F/P questions)
+        assert result.personality_type == PersonalityType.ESTJ
         assert result.dimension_preferences[PersonalityDimension.EXTRAVERSION_INTROVERSION] == "E"
         assert result.dimension_preferences[PersonalityDimension.SENSING_INTUITION] == "S"
         assert result.dimension_preferences[PersonalityDimension.THINKING_FEELING] == "T"
