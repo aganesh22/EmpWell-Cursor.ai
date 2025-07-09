@@ -1,109 +1,143 @@
-Corporate Employee Wellbeing & Psychometric Analysis Platform
-============================================================
+# EmpWell - Corporate Employee Wellbeing Platform
 
-This repository contains the source code for an internal-facing web application that enables organisations to measure and improve employee wellbeing using validated psychometric instruments.
+A modern web application for corporate employee wellbeing assessment and psychometric analysis.
 
-## Architecture
+## ✨ Features
 
-The codebase is organised as a monorepo with two major packages:
+- **Employee Wellbeing Assessments**: WHO-5 Wellbeing Index and other validated psychometric tests
+- **Dashboard Analytics**: Aggregate reporting for HR teams (department-level insights)
+- **Resource Library**: Curated wellbeing resources and recommendations
+- **User Management**: Role-based access control for employees and HR administrators
+- **Modern UI**: Clean, accessible interface built with React and Tailwind CSS
 
-1. **backend/** – Python 3.11 + FastAPI service that exposes a REST-style API, handles authentication/SSO, business logic, and persistence to PostgreSQL.
-2. **frontend/** – React 18 (TypeScript) application bootstrapped with Vite that consumes the backend API and provides a responsive, WCAG-compliant UI.
+## 🚀 Quick Start (Bolt/StackBlitz)
 
-## Quick start (local development)
+This project is optimized for cloud development environments:
 
-```bash
-# Clone & enter workspace
-git clone https://github.com/aganesh22/EmpWell-Cursor.ai.git
-cd EmpWell-Cursor.ai
+1. **Frontend Demo**: The React application runs immediately with mock data
+2. **Development**: Uses Vite for fast hot-reload development
+3. **No Backend Required**: Mock API provides demo functionality
 
-# Spin up full stack – PostgreSQL, backend, and frontend – with hot-reload
-docker compose up --build
-```
+## 🛠️ Local Development
 
-The stack is defined in `docker-compose.yml` and is configured for **development** use. Secrets are injected via the `.env` file (see `.env.example`).
+### Prerequisites
+- Node.js 18+ and npm 9+
+- Python 3.9+ (for backend)
 
-## Frontend Only (for Bolt/StackBlitz)
-
+### Frontend Only
 ```bash
 cd frontend
 npm install
 npm run dev
 ```
 
-## Key tech choices
+### Full Stack Development
+```bash
+# Install frontend dependencies
+cd frontend && npm install
 
-* **FastAPI** – modern, async-first framework with excellent type hints and automatic OpenAPI docs.
-* **SQLModel** – Pydantic v2 + SQLAlchemy 2.0 = fast, type-safe ORM models.
-* **PostgreSQL** – reliable, feature-rich relational database.
-* **React + Vite** – fast dev server, modern build, great DX.
-* **Chart.js** – interactive data visualization for admin dashboards.
+# Set up backend (optional)
+cd ../backend
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
 
-## Features
-
-### Phase 1 - Foundation
-- [x] Email/password registration & login (JWT)
-- [x] Google Workspace SSO (OIDC)
-- [x] Admin dashboard with user management
-- [x] Role-based access control (employee vs admin)
-
-### Phase 2 - Test Engine
-- [x] Dynamic test engine with question banks
-- [x] WHO-5 Wellbeing Index (5 questions)
-- [x] Instant results with scoring logic
-
-### Phase 3 - Advanced Assessments
-- [x] MBTI-inspired assessment (32 questions)
-- [x] DISC assessment (28 questions)
-- [x] Detailed type descriptions and recommendations
-- [x] PDF report generation
-- [x] HR aggregate reports with department comparisons
-
-### Phase 4 - Enhancements
-- [x] Interactive admin analytics dashboard
-- [x] Resources & recommendations section
-- [x] Email notification system
-- [x] Branching logic for conditional questions
-
-### Phase 5 - Production Ready
-- [x] Comprehensive testing (pytest)
-- [x] Security audits (bandit, safety)
-- [x] CI/CD pipeline (GitHub Actions)
-- [x] Deployment documentation
-
-## Environment Variables
-
-Copy `.env.example` to `.env` and configure:
-
-```
-DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
-SECRET_KEY=your-secret-key
-GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
-EMAIL_HOST=smtp.yourcompany.com
-EMAIL_USER=no-reply@yourcompany.com
-EMAIL_PASS=your-email-password
-HR_ALERT_EMAIL=hr@yourcompany.com
+# Run development servers
+npm run dev  # Frontend at http://localhost:5173
+# Backend at http://localhost:8000 (if running)
 ```
 
-## API Endpoints
+## 📁 Project Structure
 
-* `/auth/register` - User registration
-* `/auth/login` - User login
-* `/auth/google` - Google SSO
-* `/tests/` - List available tests
-* `/tests/{key}/submit` - Submit test answers
-* `/reports/aggregate` - HR analytics (admin only)
-* `/resources/` - Wellbeing resources
-* `/users/` - User management (admin only)
+```
+EmpWell-Cursor.ai/
+├── frontend/                # React TypeScript application
+│   ├── src/
+│   │   ├── components/      # Reusable UI components
+│   │   ├── pages/          # Route components
+│   │   ├── lib/            # API client and utilities
+│   │   └── main.tsx        # Application entry point
+│   ├── package.json
+│   └── vite.config.ts
+├── backend/                # Python FastAPI backend
+│   ├── app/
+│   │   ├── api/            # API routes
+│   │   ├── models/         # Database models
+│   │   └── main.py         # FastAPI application
+│   └── requirements.txt
+├── package.json            # Root workspace configuration
+└── stackblitz.config.json  # Cloud environment config
+```
 
-## Deployment
+## 🎯 Demo Credentials
 
-See `DEPLOY.md` for production deployment instructions.
+When using mock mode (default in cloud environments):
+- **Email**: demo@example.com
+- **Password**: Any password will work
+- **Role**: Employee with full access
 
-## Contributing
+## 🔧 Environment Variables
 
-Pull requests are welcome. Please open an issue first to discuss major changes.
+```bash
+# Frontend (.env in frontend/)
+VITE_API_URL=http://localhost:8000  # Optional, defaults to mock mode
 
-## License
+# Backend (.env in backend/)
+DATABASE_URL=sqlite:///./empwell.db
+SECRET_KEY=your-secret-key-here
+```
 
-MIT
+## 🏗️ Architecture
+
+- **Frontend**: React 18 + TypeScript + Vite + Tailwind CSS
+- **State Management**: TanStack Query for server state
+- **Routing**: React Router v6
+- **API Client**: Axios with mock fallback
+- **Backend**: FastAPI + SQLAlchemy + SQLite
+- **Authentication**: JWT tokens
+
+## 📊 Wellbeing Tests
+
+Implemented psychometric assessments:
+- **WHO-5 Wellbeing Index**: 5-question wellbeing assessment
+- **Extensible Framework**: Easy to add new validated tests
+
+## 🔒 Security Features
+
+- JWT-based authentication
+- Role-based access control (Employee/HR Admin)
+- Password hashing with bcrypt
+- Input validation and sanitization
+- CORS configuration
+
+## 🚀 Deployment
+
+### Frontend (Netlify/Vercel)
+```bash
+cd frontend
+npm run build
+# Deploy dist/ folder
+```
+
+### Backend (Railway/Render)
+```bash
+cd backend
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port $PORT
+```
+
+## 📝 License
+
+MIT License - see LICENSE file for details.
+
+## 🤝 Contributing
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes
+4. Add tests if applicable
+5. Submit a pull request
+
+---
+
+**Built with ❤️ for employee wellbeing and mental health awareness**

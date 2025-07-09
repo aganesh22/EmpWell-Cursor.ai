@@ -8,10 +8,18 @@ export default defineConfig({
     host: true,
     strictPort: true,
   },
+  preview: {
+    port: 5173,
+    host: true,
+  },
   define: {
     global: "globalThis",
   },
   optimizeDeps: {
-    include: ["react", "react-dom"],
+    include: ["react", "react-dom", "react-router-dom", "@tanstack/react-query"],
+  },
+  build: {
+    outDir: "dist",
+    sourcemap: true,
   },
 });

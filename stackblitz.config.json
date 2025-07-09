@@ -1,0 +1,5 @@
+{
+  "installDependencies": true,
+  "startCommand": "cd frontend && npm install && npm run dev",
+  "node": "18"
+}

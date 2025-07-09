@@ -2,17 +2,21 @@
   "name": "empwell-cursor-ai",
   "version": "1.0.0",
   "description": "Corporate Employee Wellbeing & Psychometric Analysis Platform",
+  "main": "frontend/src/main.tsx",
   "scripts": {
-    "dev": "docker compose up --build",
-    "build": "docker compose build",
-    "test": "docker compose run --rm backend pytest",
-    "lint": "docker compose run --rm backend bandit -r backend/app -ll"
+    "dev": "cd frontend && npm run dev",
+    "build": "cd frontend && npm run build",
+    "preview": "cd frontend && npm run preview",
+    "install-frontend": "cd frontend && npm install"
   },
-  "keywords": ["wellbeing", "psychometric", "assessment", "hr"],
+  "keywords": ["wellbeing", "psychometric", "assessment", "hr", "react", "typescript"],
   "author": "Corporate Wellbeing Team",
   "license": "MIT",
   "engines": {
     "node": ">=18.0.0",
     "npm": ">=9.0.0"
-  }
+  },
+  "workspaces": [
+    "frontend"
+  ]
 }
