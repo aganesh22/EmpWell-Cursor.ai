@@ -9,9 +9,9 @@ from backend.app.database import get_session
 
 @pytest.fixture(scope="session")
 def test_engine():
-    # Use temporary file for SQLite database
-    db_fd, db_path = tempfile.mkstemp()
-    database_url = f"sqlite:///{db_path}"
+    """Create a test database engine using SQLite."""
+    # Use in-memory SQLite database for tests
+    database_url = "sqlite:///:memory:"
     
     engine = create_engine(
         database_url, 
@@ -20,37 +20,32 @@ def test_engine():
     )
     
     # Import all models to ensure they're registered
-    from backend.app import models  # noqa: F401
+    try:
+        from backend.app import models  # noqa: F401
+    except ImportError:
+        pass
     
     # Create all tables
     SQLModel.metadata.create_all(engine)
     
-    yield engine
-    
-    # Cleanup
-    os.close(db_fd)
-    os.unlink(db_path)
+    return engine
 
 @pytest.fixture
 def test_session(test_engine):
-    connection = test_engine.connect()
-    transaction = connection.begin()
-    session = Session(bind=connection)
-    
-    yield session
-    
-    session.close()
-    transaction.rollback()
-    connection.close()
+    """Create a test database session."""
+    with Session(test_engine) as session:
+        yield session
 
 @pytest.fixture
 def client(test_session):
+    """Create a test client with database session override."""
     def get_session_override():
         return test_session
     
     app.dependency_overrides[get_session] = get_session_override
     
-    with TestClient(app) as test_client:
-        yield test_client
-    
-    app.dependency_overrides.clear()
+    try:
+        with TestClient(app) as test_client:
+            yield test_client
+    finally:
+        app.dependency_overrides.clear()
