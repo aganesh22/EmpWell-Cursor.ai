@@ -46,9 +46,9 @@ class User(UserBase, table=True):
     deletion_scheduled_for: Optional[datetime] = None
 
     # Relationships
-    consents: Mapped[list["UserConsent"]] = Relationship(back_populates="user")
-    processing_logs: Mapped[list["DataProcessingLog"]] = Relationship(back_populates="user")
-    export_requests: Mapped[list["DataExportRequest"]] = Relationship(back_populates="user")
+    consents: Mapped[List["UserConsent"]] = Relationship(back_populates="user")
+    processing_logs: Mapped[List["DataProcessingLog"]] = Relationship(back_populates="user")
+    export_requests: Mapped[List["DataExportRequest"]] = Relationship(back_populates="user")
 
 
 # --- Token management (optional for future blacklisting / refresh) ---
@@ -66,7 +66,7 @@ class TestTemplate(SQLModel, table=True):
     name: str
     description: Optional[str] = None
 
-    questions: Mapped[list["Question"]] = Relationship(back_populates="template")
+    questions: Mapped[List["Question"]] = Relationship(back_populates="template")
 
 
 class Question(SQLModel, table=True):
@@ -105,7 +105,7 @@ class TestAttempt(SQLModel, table=True):
     anonymized_user_hash: Optional[str] = None  # Hash for linking anonymized records
     department_hash: Optional[str] = None  # Anonymized department identifier
 
-    responses: Mapped[list["Response"]] = Relationship(back_populates="attempt")
+    responses: Mapped[List["Response"]] = Relationship(back_populates="attempt")
 
 
 class Response(SQLModel, table=True):
