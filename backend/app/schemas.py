@@ -12,12 +12,14 @@ class UserCreate(SQLModel):
     email: EmailStr
     full_name: Optional[str] = None
     password: str
+    department: Optional[str] = None
 
 
 class UserRead(SQLModel):
     id: int
     email: EmailStr
     full_name: Optional[str]
+    department: Optional[str]
     is_active: bool
     role: Role
 

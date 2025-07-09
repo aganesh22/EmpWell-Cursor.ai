@@ -11,8 +11,8 @@ def get_user_by_email(session: Session, *, email: str) -> User | None:
     return session.exec(statement).first()
 
 
-def create_user(session: Session, *, email: str, full_name: str | None, password: str) -> User:
-    db_user = User(email=email.lower(), full_name=full_name, hashed_password=get_password_hash(password))
+def create_user(session: Session, *, email: str, full_name: str | None, password: str, department: str | None = None) -> User:
+    db_user = User(email=email.lower(), full_name=full_name, department=department, hashed_password=get_password_hash(password))
     session.add(db_user)
     session.commit()
     session.refresh(db_user)

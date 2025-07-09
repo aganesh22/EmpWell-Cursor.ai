@@ -15,6 +15,7 @@ class Role(str, enum.Enum):
 class UserBase(SQLModel):
     email: str = Field(index=True, nullable=False, unique=True, sa_column_kwargs={"unique": True})
     full_name: Optional[str] = None
+    department: Optional[str] = None
     is_active: bool = True
     role: Role = Field(default=Role.employee, nullable=False)
 

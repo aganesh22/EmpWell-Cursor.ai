@@ -6,7 +6,6 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import StreamingResponse
 from io import BytesIO
 from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
 from sqlmodel import Session, select
 
 from backend.app.database import get_session
@@ -188,28 +187,64 @@ def download_report(attempt_id: int, user=Depends(get_current_user), session: Se
 
     template = session.get(TestTemplate, attempt.template_id)
 
-    buffer = BytesIO()
-    c = canvas.Canvas(buffer, pagesize=letter)
-    width, height = letter
+    from reportlab.platypus import SimpleDocTemplate, Paragraph, Spacer, Table, TableStyle
+    from reportlab.lib.styles import getSampleStyleSheet
+    from reportlab.lib import colors
+    from reportlab.graphics.shapes import Drawing
+    from reportlab.graphics.charts.barcharts import VerticalBarChart
 
-    y = height - 50
-    c.setFont("Helvetica-Bold", 16)
-    c.drawString(50, y, f"{template.name} Result Report")
-    y -= 30
-    c.setFont("Helvetica", 12)
-    c.drawString(50, y, f"User ID: {attempt.user_id}")
-    y -= 20
-    c.drawString(50, y, f"Date: {attempt.created_at.strftime('%Y-%m-%d')}")
-    y -= 30
-    c.drawString(50, y, f"Interpretation: {attempt.interpretation or 'N/A'}")
-    y -= 30
+    buffer = BytesIO()
+    doc = SimpleDocTemplate(buffer, pagesize=letter)
+    styles = getSampleStyleSheet()
+    flow = []
+
+    flow.append(Paragraph(f"{template.name} – Personal Report", styles["Title"]))
+    flow.append(Paragraph(f"Date: {attempt.created_at.strftime('%Y-%m-%d')}", styles["Normal"]))
+    flow.append(Spacer(1, 12))
+    flow.append(Paragraph(f"Interpretation: <b>{attempt.interpretation or 'N/A'}</b>", styles["Heading2"]))
 
     if attempt.normalized_score is not None:
-        c.drawString(50, y, f"Score: {attempt.normalized_score:.2f}")
-        y -= 30
+        flow.append(Paragraph(f"Overall Score: {attempt.normalized_score:.2f}", styles["Normal"]))
 
-    c.showPage()
-    c.save()
+    # Tips
+    from backend.app.schemas import TestResult
+
+    if attempt.interpretation:
+        result = TestResult.parse_obj({
+            "raw_score": attempt.raw_score or 0,
+            "normalized_score": attempt.normalized_score or 0,
+            "interpretation": attempt.interpretation,
+            "tips": [],
+        })
+    try:
+        tips = result.tips  # type: ignore
+        if tips:
+            flow.append(Spacer(1, 12))
+            flow.append(Paragraph("Recommendations:", styles["Heading3"]))
+            for tip in tips:
+                flow.append(Paragraph(f"• {tip}", styles["Normal"]))
+    except Exception:
+        pass
+
+    # Simple bar chart for WHO-5 answers
+    if template.key == "who5" and attempt.responses:
+        values = [r.value for r in attempt.responses]
+        drawing = Drawing(400, 200)
+        bc = VerticalBarChart()
+        bc.x = 50
+        bc.y = 30
+        bc.height = 130
+        bc.width = 300
+        bc.data = [values]
+        bc.barWidth = 15
+        bc.categoryAxis.categoryNames = [f"Q{i+1}" for i in range(len(values))]
+        bc.valueAxis.valueMin = 0
+        bc.valueAxis.valueMax = 5
+        drawing.add(bc)
+        flow.append(Spacer(1, 12))
+        flow.append(drawing)
+
+    doc.build(flow)
 
     buffer.seek(0)
     return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": f"attachment; filename=report_{attempt_id}.pdf"})
