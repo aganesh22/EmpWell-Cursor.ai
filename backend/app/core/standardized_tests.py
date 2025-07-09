@@ -13,6 +13,7 @@ import statistics
 from sqlmodel import Session
 
 from backend.app.models import TestTemplate, Question, TestAttempt, Response
+from backend.app.core.personality_tests import PersonalityTest, calculate_personality_type
 
 
 class RiskLevel(str, Enum):
@@ -568,7 +569,8 @@ class StandardizedTestRegistry:
     
     TESTS = {
         WHO5WellbeingIndex.KEY: WHO5WellbeingIndex,
-        GAD7AnxietyScale.KEY: GAD7AnxietyScale
+        GAD7AnxietyScale.KEY: GAD7AnxietyScale,
+        PersonalityTest.KEY: PersonalityTest
     }
     
     @classmethod

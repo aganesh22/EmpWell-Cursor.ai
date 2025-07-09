@@ -113,6 +113,9 @@ jobs:
           echo "DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres" >> $GITHUB_ENV
           echo "SECRET_KEY=test-secret-key-for-ci-$(date +%s)" >> $GITHUB_ENV
           echo "GOOGLE_CLIENT_ID=fake-google-client-id-for-testing" >> $GITHUB_ENV
+          echo "AZURE_CLIENT_ID=fake-azure-client-id-for-testing" >> $GITHUB_ENV
+          echo "AZURE_CLIENT_SECRET=fake-azure-client-secret-for-testing" >> $GITHUB_ENV
+          echo "AZURE_TENANT_ID=fake-azure-tenant-id-for-testing" >> $GITHUB_ENV
           
       - name: Wait for PostgreSQL
         run: |

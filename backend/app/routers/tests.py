@@ -28,6 +28,7 @@ from backend.app.core.standardized_tests import (
     calculate_who5_score,
     calculate_gad7_score
 )
+from backend.app.core.personality_tests import PersonalityTest, calculate_personality_type
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 logger = logging.getLogger(__name__)
@@ -222,6 +223,22 @@ COMPREHENSIVE_TEST_LIBRARY = {
         ],
         "scoring_rules": {"type": "simple_sum", "normalization_method": "percentage"},
         "interpretation_guide": {"score_ranges": [], "recommendations": [], "risk_indicators": []}
+    },
+    "mbti16": {
+        "key": "mbti16",
+        "name": "16 Personality Types Assessment",
+        "description": "MBTI-inspired personality assessment measuring four dichotomies",
+        "category": "personality",
+        "duration_minutes": 15,
+        "branching_enabled": False,
+        "questions": PersonalityTest.get_question_data(),
+        "scoring_rules": {"type": "dimensional", "dimensions": ["EI", "SN", "TF", "JP"]},
+        "interpretation_guide": {
+            "score_ranges": [],
+            "recommendations": [],
+            "risk_indicators": [],
+            "personality_types": list(PersonalityTest.TYPE_DESCRIPTIONS.keys())
+        }
     }
 }
 
@@ -345,8 +362,37 @@ def submit_test(key: str, answers: List[int],
     if key in COMPREHENSIVE_TEST_LIBRARY:
         test_config = COMPREHENSIVE_TEST_LIBRARY[key]
         
-        # Calculate results using advanced scoring
-        results = calculate_advanced_score(test_config, answers)
+        # Special handling for personality test
+        if key == "mbti16":
+            try:
+                personality_result = calculate_personality_type(answers)
+                results = {
+                    "raw_score": 0,  # Not applicable for personality test
+                    "normalized_score": 0,  # Not applicable for personality test
+                    "interpretation": str(personality_result.personality_type.value),
+                    "personality_type": personality_result.personality_type.value,
+                    "type_description": personality_result.type_description,
+                    "dimension_scores": {k.value: v for k, v in personality_result.dimension_scores.items()},
+                    "dimension_preferences": {k.value: v for k, v in personality_result.dimension_preferences.items()},
+                    "confidence_scores": {k.value: v for k, v in personality_result.confidence_scores.items()},
+                    "strengths": personality_result.strengths,
+                    "potential_challenges": personality_result.potential_challenges,
+                    "career_suggestions": personality_result.career_suggestions,
+                    "relationship_insights": personality_result.relationship_insights,
+                    "development_tips": personality_result.development_tips,
+                    "tips": personality_result.development_tips[:3],  # For compatibility
+                    "risk_level": "low",  # Personality tests don't have risk levels
+                    "detailed_feedback": f"Your personality type is {personality_result.personality_type.value}",
+                    "follow_up_suggested": False
+                }
+            except Exception as e:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Error calculating personality type: {str(e)}"
+                )
+        else:
+            # Calculate results using advanced scoring
+            results = calculate_advanced_score(test_config, answers)
         
         # Save attempt to database (optional for tracking)
         try:
