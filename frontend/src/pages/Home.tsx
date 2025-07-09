@@ -16,7 +16,9 @@ export default function Home() {
     >
       <h1>Corporate Wellbeing Platform</h1>
       {token ? (
-        <p>You are logged in.</p>
+        <p>
+          You are logged in. <Link to="/admin">Admin Dashboard</Link>
+        </p>
       ) : (
         <p>
           <Link to="/login">Login</Link> or <Link to="/register">Register</Link>

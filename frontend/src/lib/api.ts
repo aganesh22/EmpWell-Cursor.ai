@@ -32,3 +32,31 @@ export function loginUser({ email, password }: LoginPayload) {
 export function loginWithGoogle(id_token: string) {
   return api.post("/auth/google", { id_token });
 }
+
+export function listUsers(token: string) {
+  return api.get<User[]>("/users", { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function inviteUserApi(token: string, data: { email: string; full_name?: string; role: string }) {
+  return api.post("/users/invite", data, { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function updateUserStatusApi(token: string, userId: number, is_active: boolean) {
+  return api.patch(`/users/${userId}/status`, { is_active }, { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function resetPasswordApi(token: string, userId: number, password: string) {
+  return api.post(`/users/${userId}/reset_password`, { password }, { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export interface User {
+  id: number;
+  email: string;
+  full_name?: string;
+  is_active: boolean;
+  role: string;
+}
+
+export function getMe(token: string) {
+  return api.get<User>("/auth/me", { headers: { Authorization: `Bearer ${token}` } });
+}

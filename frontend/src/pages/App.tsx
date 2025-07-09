@@ -3,6 +3,7 @@ import Home from "./Home";
 import React from "react";
 import Login from "./Login";
 import Register from "./Register";
+import AdminDashboard from "./AdminDashboard";
 
 export default function App() {
   return (
@@ -10,6 +11,7 @@ export default function App() {
       <Route path="/" element={<Home />} />
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
+      <Route path="/admin" element={<AdminDashboard />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

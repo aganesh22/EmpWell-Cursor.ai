@@ -37,8 +37,8 @@ export default function Register() {
           <label>Password</label>
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
-        <button type="submit" disabled={mutation.isLoading} style={{ marginTop: 16 }}>
-          {mutation.isLoading ? "Registering..." : "Register"}
+        <button type="submit" disabled={mutation.isPending} style={{ marginTop: 16 }}>
+          {mutation.isPending ? "Registering..." : "Register"}
         </button>
       </form>
       {mutation.isError && <p style={{ color: "red" }}>Registration failed</p>}

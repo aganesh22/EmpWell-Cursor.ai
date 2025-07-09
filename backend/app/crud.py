@@ -24,3 +24,19 @@ def authenticate_user(session: Session, *, email: str, password: str) -> User | 
     if not user or not verify_password(password, user.hashed_password):
         return None
     return user
+
+
+def update_user_status(session: Session, user: User, *, is_active: bool) -> User:
+    user.is_active = is_active
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+
+def set_user_password(session: Session, user: User, *, password: str) -> User:
+    user.hashed_password = get_password_hash(password)
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user

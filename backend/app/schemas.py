@@ -32,3 +32,15 @@ class Token(SQLModel):
 
 class GoogleToken(SQLModel):
     id_token: str
+
+
+class UserInvite(SQLModel):
+    email: EmailStr
+    full_name: Optional[str] = None
+    role: Role = Role.employee
+
+class UserStatusUpdate(SQLModel):
+    is_active: bool
+
+class PasswordReset(SQLModel):
+    password: str

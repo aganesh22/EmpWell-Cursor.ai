@@ -61,8 +61,8 @@ export default function Login() {
           <label>Password</label>
           <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
         </div>
-        <button type="submit" disabled={mutation.isLoading} style={{ marginTop: 16 }}>
-          {mutation.isLoading ? "Logging in..." : "Login"}
+        <button type="submit" disabled={mutation.isPending} style={{ marginTop: 16 }}>
+          {mutation.isPending ? "Logging in..." : "Login"}
         </button>
       </form>
       {mutation.isError && <p style={{ color: "red" }}>Invalid credentials</p>}

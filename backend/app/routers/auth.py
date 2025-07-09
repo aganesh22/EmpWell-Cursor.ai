@@ -10,6 +10,7 @@ from sqlmodel import Session
 
 from backend.app import crud, schemas
 from backend.app.core.security import create_access_token
+from backend.app.deps import get_current_user
 from backend.app.database import get_session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -62,3 +63,8 @@ def google_sso(payload: schemas.GoogleToken, session: Session = Depends(get_sess
 
     token = create_access_token(user.id)
     return schemas.Token(access_token=token)
+
+
+@router.get("/me", response_model=schemas.UserRead)
+def read_me(current_user=Depends(get_current_user)):
+    return current_user
