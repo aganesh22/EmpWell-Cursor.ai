@@ -1,18 +1,13 @@
 name: CI
 on:
   push:
-    branches: [ main ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ main ]
+    branches: [ main, master ]
 
 jobs:
-  build-test:
+  test:
     runs-on: ubuntu-latest
-    
-    env:
-      DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
-      SECRET_KEY: test-secret-key-for-ci
-      GOOGLE_CLIENT_ID: fake-google-client-id-for-testing
     
     services:
       postgres:
@@ -30,104 +25,149 @@ jobs:
           --health-retries 5
 
     steps:
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v4
       
-      - name: Set up Python
+      - name: Set up Python 3.11
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
           
-      - name: Debug - List files
+      - name: Debug - Repository structure
         run: |
-          echo "=== Repository structure ==="
-          find . -type f -name "*.py" | head -10
-          echo "=== Requirements files ==="
-          ls -la *requirements*.txt || echo "No requirements files found"
+          echo "=== Current working directory ==="
+          pwd
+          echo ""
+          echo "=== Repository root contents ==="
+          ls -la
+          echo ""
           echo "=== Backend directory ==="
-          ls -la backend/ || echo "No backend directory"
-          
-      - name: Cache pip dependencies
-        uses: actions/cache@v3
-        with:
-          path: ~/.cache/pip
-          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
-          restore-keys: |
-            ${{ runner.os }}-pip-
+          if [ -d "backend" ]; then
+            ls -la backend/
+            echo ""
+            echo "=== Backend app directory ==="
+            if [ -d "backend/app" ]; then
+              ls -la backend/app/
+            else
+              echo "backend/app directory not found"
+            fi
+            echo ""
+            echo "=== Backend tests directory ==="
+            if [ -d "backend/tests" ]; then
+              ls -la backend/tests/
+            else
+              echo "backend/tests directory not found"
+            fi
+          else
+            echo "backend directory not found"
+          fi
+          echo ""
+          echo "=== Python files ==="
+          find . -name "*.py" -type f | head -20
           
       - name: Install system dependencies
         run: |
-          sudo apt-get update -qq
+          sudo apt-get update -q
           sudo apt-get install -y postgresql-client libpq-dev
           
-      - name: Debug - Python and pip versions
+      - name: Check and install Python dependencies
         run: |
+          echo "=== Python and pip versions ==="
           python --version
           pip --version
-          which python
+          echo ""
           
-      - name: Install Python dependencies
-        run: |
-          echo "=== Installing Python dependencies ==="
+          echo "=== Upgrading pip ==="
           python -m pip install --upgrade pip setuptools wheel
+          echo ""
           
           echo "=== Checking requirements files ==="
           if [ -f "backend/requirements.txt" ]; then
-            echo "Installing backend/requirements.txt"
+            echo "✓ Found backend/requirements.txt"
+            cat backend/requirements.txt
+            echo ""
+            echo "Installing backend requirements..."
             pip install -r backend/requirements.txt
           else
-            echo "backend/requirements.txt not found"
+            echo "❌ backend/requirements.txt not found"
             exit 1
           fi
           
           if [ -f "requirements-dev.txt" ]; then
-            echo "Installing requirements-dev.txt"
+            echo "✓ Found requirements-dev.txt"
+            cat requirements-dev.txt
+            echo ""
+            echo "Installing dev requirements..."
             pip install -r requirements-dev.txt
           else
-            echo "requirements-dev.txt not found"
+            echo "❌ requirements-dev.txt not found"
             exit 1
           fi
           
+          echo ""
           echo "=== Installed packages ==="
-          pip list
+          pip list | grep -E "(fastapi|sqlmodel|pytest|bandit|safety)"
+          
+      - name: Set environment variables
+        run: |
+          echo "DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres" >> $GITHUB_ENV
+          echo "SECRET_KEY=test-secret-key-for-ci-$(date +%s)" >> $GITHUB_ENV
+          echo "GOOGLE_CLIENT_ID=fake-google-client-id-for-testing" >> $GITHUB_ENV
           
       - name: Wait for PostgreSQL
         run: |
-          echo "=== Waiting for PostgreSQL ==="
-          timeout 60s bash -c 'until pg_isready -h localhost -p 5432 -U postgres; do 
-            echo "Waiting for postgres..."; 
-            sleep 2; 
-          done'
-          echo "PostgreSQL is ready"
+          echo "=== Waiting for PostgreSQL to be ready ==="
+          for i in {1..30}; do
+            if pg_isready -h localhost -p 5432 -U postgres; then
+              echo "✓ PostgreSQL is ready"
+              break
+            else
+              echo "Waiting for PostgreSQL... attempt $i/30"
+              sleep 2
+            fi
+          done
           
-      - name: Debug - Test environment
+          # Test database connection
+          PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "SELECT version();"
+          
+      - name: Set Python path and test imports
         run: |
-          echo "=== Environment variables ==="
-          echo "DATABASE_URL: $DATABASE_URL"
-          echo "SECRET_KEY: ${SECRET_KEY:0:10}..."
-          echo "PYTHONPATH: $PYTHONPATH"
+          echo "=== Setting up Python path ==="
+          export PYTHONPATH="${PYTHONPATH}:$(pwd)"
+          echo "PYTHONPATH=$PYTHONPATH" >> $GITHUB_ENV
           
-          echo "=== Python path and imports ==="
-          python -c "import sys; print('Python path:', sys.path)"
-          
-          echo "=== Test directory structure ==="
-          find backend/tests -name "*.py" 2>/dev/null || echo "No test files found"
-          
-      - name: Run tests with verbose output
-        run: |
-          echo "=== Running tests ==="
+          echo "=== Testing basic imports ==="
           cd backend
-          python -m pytest tests/ -v --tb=long --no-header -s
-        continue-on-error: false
+          python -c "
+          import sys
+          print('Python path:', sys.path)
+          try:
+              from app.main import app
+              print('✓ Successfully imported FastAPI app')
+          except Exception as e:
+              print('❌ Failed to import app:', e)
+              sys.exit(1)
+          "
           
-      - name: Run security scan
+      - name: Run tests
         run: |
-          echo "=== Running security scan ==="
-          bandit -r backend/app -ll || echo "Bandit scan completed with issues"
-        continue-on-error: true
+          echo "=== Running pytest ==="
+          cd backend
+          
+          # Set environment variables for tests
+          export DATABASE_URL="$DATABASE_URL"
+          export SECRET_KEY="$SECRET_KEY"
+          export GOOGLE_CLIENT_ID="$GOOGLE_CLIENT_ID"
+          
+          # Run tests with maximum verbosity
+          python -m pytest tests/ -v --tb=long --no-header -s --capture=no
+          
+      - name: Run security audit
+        run: |
+          echo "=== Running Bandit security scan ==="
+          bandit -r backend/app -f text || echo "⚠ Bandit found security issues"
           
       - name: Check for vulnerabilities
         run: |
-          echo "=== Checking vulnerabilities ==="
-          safety check --file backend/requirements.txt --output text || echo "Safety check completed with issues"
-        continue-on-error: true
+          echo "=== Running Safety vulnerability check ==="
+          safety check --file backend/requirements.txt || echo "⚠ Safety found vulnerabilities"
