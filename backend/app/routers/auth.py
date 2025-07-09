@@ -2,17 +2,20 @@ from __future__ import annotations
 
 import os
 import secrets
-import requests
-from google.oauth2 import id_token as google_id_token
-from google.auth.transport import requests as google_requests
-from fastapi import APIRouter, Depends, HTTPException, status
+import logging
+from typing import Dict, Any
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlmodel import Session
 
 from backend.app import crud, schemas
 from backend.app.core.security import create_access_token
+from backend.app.core.sso import create_sso_user_service, create_azure_sso_service, SSOError
 from backend.app.deps import get_current_user
 from backend.app.database import get_session
+
+# Configure logging
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -35,82 +38,211 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), session: Session = D
     return schemas.Token(access_token=token)
 
 
-# --- Google Workspace SSO ---
+# --- Enhanced SSO Endpoints ---
 
-GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID")
-AZURE_CLIENT_ID = os.getenv("AZURE_CLIENT_ID")
-AZURE_TENANT_ID = os.getenv("AZURE_TENANT_ID")
-
-
-@router.post("/google", response_model=schemas.Token)
-def google_sso(payload: schemas.GoogleToken, session: Session = Depends(get_session)):
-    """Accept an `id_token` from Google Identity Services and exchange for platform JWT."""
-
-    if not GOOGLE_CLIENT_ID:
-        raise HTTPException(status_code=500, detail="Google SSO not configured")
-
+@router.post("/sso/google", response_model=schemas.Token)
+def google_sso_login(
+    payload: schemas.GoogleToken, 
+    session: Session = Depends(get_session)
+):
+    """
+    Authenticate with Google Workspace using ID token.
+    Supports auto-provisioning and role mapping.
+    """
     try:
-        idinfo = google_id_token.verify_oauth2_token(payload.id_token, google_requests.Request(), GOOGLE_CLIENT_ID)
-    except Exception as exc:  # catch verify errors
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Google token") from exc
-
-    email = idinfo.get("email")
-    if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Google token missing email")
-
-    user = crud.get_user_by_email(session, email=email)
-    if not user:
-        # Auto-provision user with random password (not used).
-        random_pw = secrets.token_urlsafe(16)
-        user = crud.create_user(session, email=email, full_name=idinfo.get("name"), password=random_pw)
-
-    token = create_access_token(user.id)
-    return schemas.Token(access_token=token)
-
-
-# --- Azure AD SSO ---
-
-@router.post("/azure", response_model=schemas.Token)
-def azure_sso(payload: schemas.AzureToken, session: Session = Depends(get_session)):
-    """Accept an access_token from Azure AD and exchange for platform JWT."""
-
-    if not AZURE_CLIENT_ID or not AZURE_TENANT_ID:
-        raise HTTPException(status_code=500, detail="Azure AD SSO not configured")
-
-    try:
-        # Verify the access token with Microsoft Graph API
-        graph_url = "https://graph.microsoft.com/v1.0/me"
-        headers = {"Authorization": f"Bearer {payload.access_token}"}
+        sso_service = create_sso_user_service(session)
+        user, access_token = sso_service.authenticate_google_user(payload.id_token)
         
-        response = requests.get(graph_url, headers=headers)
-        if response.status_code != 200:
-            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid Azure token")
+        logger.info(f"Successful Google SSO login for user: {user.email}")
+        return schemas.Token(access_token=access_token)
         
-        user_info = response.json()
-        
-    except Exception as exc:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid Azure token") from exc
-
-    email = user_info.get("mail") or user_info.get("userPrincipalName")
-    if not email:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Azure token missing email")
-
-    user = crud.get_user_by_email(session, email=email)
-    if not user:
-        # Auto-provision user with Azure details
-        display_name = user_info.get("displayName")
-        department = user_info.get("department")
-        random_pw = secrets.token_urlsafe(16)
-        user = crud.create_user(
-            session, 
-            email=email, 
-            full_name=display_name, 
-            password=random_pw,
-            department=department
+    except SSOError as e:
+        logger.warning(f"Google SSO failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in Google SSO: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication service unavailable"
         )
 
-    token = create_access_token(user.id)
-    return schemas.Token(access_token=token)
+
+@router.post("/sso/azure", response_model=schemas.Token)
+def azure_sso_login(
+    payload: schemas.AzureToken,
+    session: Session = Depends(get_session)
+):
+    """
+    Authenticate with Azure AD using access token.
+    Supports auto-provisioning and role mapping.
+    """
+    try:
+        sso_service = create_sso_user_service(session)
+        user, access_token = sso_service.authenticate_azure_user(payload.access_token)
+        
+        logger.info(f"Successful Azure SSO login for user: {user.email}")
+        return schemas.Token(access_token=access_token)
+        
+    except SSOError as e:
+        logger.warning(f"Azure SSO failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in Azure SSO: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication service unavailable"
+        )
+
+
+@router.get("/sso/azure/login-url")
+def get_azure_login_url(redirect_uri: str = None):
+    """
+    Get Azure AD authorization URL for OAuth flow.
+    
+    Args:
+        redirect_uri: Optional redirect URI for the OAuth flow
+    """
+    try:
+        azure_service = create_azure_sso_service()
+        state = secrets.token_urlsafe(32)
+        
+        # Store state in session or cache for validation
+        # For now, we'll return it for the client to track
+        auth_url = azure_service.get_authorization_url(state)
+        
+        return {
+            "authorization_url": auth_url,
+            "state": state,
+            "redirect_uri": redirect_uri
+        }
+        
+    except SSOError as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to generate authorization URL: {e}"
+        )
+
+
+@router.post("/sso/azure/callback")
+def azure_oauth_callback(
+    code: str,
+    state: str,
+    redirect_uri: str,
+    session: Session = Depends(get_session)
+):
+    """
+    Handle Azure AD OAuth callback and exchange code for token.
+    
+    Args:
+        code: Authorization code from Azure AD
+        state: State parameter for CSRF protection
+        redirect_uri: Redirect URI used in authorization request
+    """
+    try:
+        azure_service = create_azure_sso_service()
+        
+        # Exchange code for token
+        token_result = azure_service.exchange_code_for_token(code, redirect_uri)
+        access_token = token_result.get("access_token")
+        
+        if not access_token:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Failed to obtain access token"
+            )
+        
+        # Authenticate user with token
+        sso_service = create_sso_user_service(session)
+        user, jwt_token = sso_service.authenticate_azure_user(access_token)
+        
+        logger.info(f"Successful Azure OAuth callback for user: {user.email}")
+        return schemas.Token(access_token=jwt_token)
+        
+    except SSOError as e:
+        logger.warning(f"Azure OAuth callback failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error in Azure OAuth callback: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Authentication service unavailable"
+        )
+
+
+@router.post("/sso/sync-profile")
+def sync_sso_profile(
+    provider: str,
+    access_token: str,
+    current_user=Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """
+    Sync user profile from SSO provider.
+    
+    Args:
+        provider: SSO provider ('google' or 'azure')
+        access_token: Valid access token for the provider
+    """
+    if provider not in ["google", "azure"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid provider. Must be 'google' or 'azure'"
+        )
+    
+    try:
+        sso_service = create_sso_user_service(session)
+        updated_user = sso_service.sync_user_profile(
+            current_user.id, 
+            provider, 
+            access_token
+        )
+        
+        logger.info(f"Profile synced for user {updated_user.email} from {provider}")
+        return {
+            "message": "Profile synchronized successfully",
+            "user": {
+                "email": updated_user.email,
+                "full_name": updated_user.full_name,
+                "department": updated_user.department,
+                "role": updated_user.role
+            }
+        }
+        
+    except SSOError as e:
+        logger.warning(f"Profile sync failed: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(e)
+        )
+    except Exception as e:
+        logger.error(f"Unexpected error syncing profile: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Profile sync service unavailable"
+        )
+
+
+# --- Legacy SSO Endpoints (for backward compatibility) ---
+
+@router.post("/google", response_model=schemas.Token)
+def google_sso_legacy(payload: schemas.GoogleToken, session: Session = Depends(get_session)):
+    """Legacy Google SSO endpoint - redirects to new endpoint"""
+    return google_sso_login(payload, session)
+
+
+@router.post("/azure", response_model=schemas.Token)
+def azure_sso_legacy(payload: schemas.AzureToken, session: Session = Depends(get_session)):
+    """Legacy Azure SSO endpoint - redirects to new endpoint"""
+    return azure_sso_login(payload, session)
 
 
 @router.get("/me", response_model=schemas.UserRead)

@@ -41,6 +41,33 @@ class AzureToken(SQLModel):
     access_token: str
 
 
+class SSOProfileSync(SQLModel):
+    provider: str
+    access_token: str
+
+
+class SSOUserInfo(SQLModel):
+    email: str
+    full_name: Optional[str] = None
+    department: Optional[str] = None
+    role: Role
+    provider: str
+    provider_user_id: Optional[str] = None
+
+
+class AzureAuthCallback(SQLModel):
+    code: str
+    state: str
+    redirect_uri: str
+
+
+class SSOConfigStatus(SQLModel):
+    google_enabled: bool
+    azure_enabled: bool
+    auto_provisioning: bool
+    domain_restrictions: Optional[Dict[str, str]] = None
+
+
 class UserInvite(SQLModel):
     email: EmailStr
     full_name: Optional[str] = None
