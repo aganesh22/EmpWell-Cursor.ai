@@ -42,8 +42,8 @@ def submit_test(key: str, answers: List[int],  # Expect list of selected values 
         raise HTTPException(status_code=404, detail="Test not found")
 
     questions = sorted(template.questions, key=lambda q: q.order)
-    if len(answers) != len(questions):
-        raise HTTPException(status_code=400, detail="Invalid number of answers")
+    if len(answers) > len(questions):
+        raise HTTPException(status_code=400, detail="Too many answers supplied")
 
     # Save attempt
     attempt = TestAttempt(template_id=template.id, user_id=user.id)
@@ -52,10 +52,23 @@ def submit_test(key: str, answers: List[int],  # Expect list of selected values 
     session.refresh(attempt)
 
     raw_score = 0.0
-    for q, val in zip(questions, answers):
+    answer_map: dict[int, int] = {}
+    for idx, q in enumerate(questions):
+        # Branching: if question has condition
+        if q.show_if_question_id and q.show_if_value is not None:
+            prev_val = answer_map.get(q.show_if_question_id)
+            if prev_val != q.show_if_value:
+                continue  # skip question
+
+        if idx >= len(answers):
+            raise HTTPException(status_code=400, detail="Missing answers for required questions")
+        val = answers[idx]
+
         if not (q.min_value <= val <= q.max_value):
             raise HTTPException(status_code=400, detail="Answer value out of range")
+
         raw_score += val * q.weight
+        answer_map[q.id] = val
         session.add(Response(attempt_id=attempt.id, question_id=q.id, value=val))
 
     if key == "who5":

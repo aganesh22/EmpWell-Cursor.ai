@@ -7,6 +7,7 @@ import AdminDashboard from "./AdminDashboard";
 import Who5Test from "./Who5Test";
 import MBTITest from "./MBTITest";
 import DISCTest from "./DISCTest";
+import AdminAnalytics from "./AdminAnalytics";
 
 export default function App() {
   return (
@@ -15,6 +16,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/admin" element={<AdminDashboard />} />
+      <Route path="/admin/analytics" element={<AdminAnalytics />} />
       <Route path="/test/who5" element={<Who5Test />} />
       <Route path="/test/mbti" element={<MBTITest />} />
       <Route path="/test/disc" element={<DISCTest />} />

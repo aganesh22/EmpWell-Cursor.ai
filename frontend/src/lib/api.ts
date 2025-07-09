@@ -94,3 +94,9 @@ export interface TestResult {
 export function submitTest(token: string, key: string, answers: number[]) {
   return api.post<TestResult>(`/tests/${key}/submit`, answers, { headers: { Authorization: `Bearer ${token}` } });
 }
+
+export function fetchAggregate(token: string, byDept = true, days = 180) {
+  return api.get<any>(`/reports/aggregate?by_department=${byDept}&days=${days}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
