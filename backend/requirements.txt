@@ -19,3 +19,4 @@ celery==5.3.4
 google-auth==2.23.0
 msal==1.25.0
 reportlab==4.0.5
+google-api-python-client==2.123.0
