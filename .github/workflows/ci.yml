@@ -15,19 +15,53 @@ jobs:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: postgres
-        ports: ["5432:5432"]
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - uses: actions/checkout@v4
+      
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - name: Install deps
+          
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-client
+          
+      - name: Install Python dependencies
         run: |
           pip install --upgrade pip
-          pip install -r backend/requirements.txt -r requirements-dev.txt
+          pip install -r backend/requirements.txt
+          pip install -r requirements-dev.txt
+          
+      - name: Set environment variables
+        run: |
+          echo "DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres" >> $GITHUB_ENV
+          echo "SECRET_KEY=test-secret-key" >> $GITHUB_ENV
+          
+      - name: Wait for PostgreSQL
+        run: |
+          until pg_isready -h localhost -p 5432 -U postgres; do
+            echo "Waiting for postgres..."
+            sleep 2
+          done
+          
       - name: Run tests
-        run: pytest backend/tests
-      - name: Run Bandit security scan
-        run: bandit -r backend/app -ll
-      - name: Safety vulnerability check
-        run: safety check -r backend/requirements.txt
+        run: |
+          cd backend
+          python -m pytest tests/ -v
+          
+      - name: Run security scan
+        run: |
+          bandit -r backend/app -ll
+          
+      - name: Check for vulnerabilities
+        run: |
+          safety check --file backend/requirements.txt
