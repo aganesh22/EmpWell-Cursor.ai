@@ -137,7 +137,7 @@ jobs:
         run: |
           echo "=== Creating optional 'root' PostgreSQL role (ignore errors) ==="
           set +e  # Do not fail if role already exists
-          PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "DO $$BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'root') THEN CREATE ROLE root WITH LOGIN PASSWORD 'postgres'; END IF; END$$;" || true
+          PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "DO \$\$BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'root') THEN CREATE ROLE root WITH LOGIN PASSWORD 'postgres'; END IF; END\$\$;" || true
           PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "ALTER ROLE root CREATEDB;" || true
           set -e
  

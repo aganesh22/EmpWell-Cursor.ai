@@ -1,159 +1,82 @@
-# CI Fixes Summary
+# CI Job Fixes Summary
 
 ## Issues Fixed
 
-### 1. Missing Requirements Files ✅
-
-**Problem**: CI job was failing because `backend/requirements.txt` and `requirements-dev.txt` were missing or incomplete.
-
-**Solution**: 
-- Created/updated `backend/requirements.txt` with all necessary backend dependencies
-- Created/updated `requirements-dev.txt` with development and testing dependencies
-
-**Files Modified**:
-- `backend/requirements.txt` - Added FastAPI, SQLModel, and all backend dependencies
-- `requirements-dev.txt` - Added pytest, mypy, and other dev tools
-
-### 2. Import Error: No module named 'backend.app.auth' ✅
-
-**Problem**: Multiple files were trying to import `get_current_user` from `backend.app.auth`, but this module doesn't exist. The function is actually in `backend.app.deps`.
+### 1. ✅ Backend Requirements Files
+**Problem**: CI was looking for `backend/requirements.txt` and `requirements-dev.txt` files that were reported as missing.
 
 **Solution**: 
-- Fixed all incorrect imports to use `from backend.app.deps import get_current_user`
-- Added missing `__init__.py` files to ensure proper Python module structure
+- Confirmed both files already exist in the correct locations:
+  - `backend/requirements.txt` ✓
+  - `requirements-dev.txt` (in root) ✓
+- No changes needed - files were already in the expected locations
 
-**Files Modified**:
-- `backend/app/api/disc.py` - Fixed import path for `get_current_user`
-- `backend/app/routers/gdpr.py` - Fixed import path for `get_current_user`
-- `backend/__init__.py` - Created missing init file
-- `backend/app/api/__init__.py` - Created missing init file
+### 2. ✅ PostgreSQL Role Creation SQL
+**Problem**: Malformed SQL command causing "trailing junk after numeric literal at or near '3142BEGIN'" error.
 
-### 3. Module Structure Improvements ✅
+**Solution**: Fixed the SQL command escaping in `.github/workflows/ci.yml`
+```yaml
+# Before (causing error):
+PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "DO $$BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'root') THEN CREATE ROLE root WITH LOGIN PASSWORD 'postgres'; END IF; END$$;" || true
 
-**Problem**: Missing `__init__.py` files could cause import issues.
-
-**Solution**: 
-- Added `__init__.py` files in all necessary directories
-- Ensured proper Python package structure
-
-**Files Created**:
-- `backend/__init__.py`
-- `backend/app/api/__init__.py`
-
-### 4. Database Role Issue (Addressed) ✅
-
-**Problem**: CI logs showed "FATAL: role 'root' does not exist" error.
-
-**Analysis**: 
-- The error is likely transient or from a different part of the system
-- CI configuration already uses `postgres` user correctly
-- Test configuration uses SQLite in-memory database, avoiding PostgreSQL altogether
-- No code changes needed as the database configuration is already correct
-
-### 5. Added DISC Module Tests ✅
-
-**Enhancement**: Added comprehensive tests for the new DISC assessment module.
-
-**Files Created**:
-- `backend/tests/test_disc_imports.py` - Tests for DISC module imports and basic functionality
-
-## Dependencies Added
-
-### Backend Requirements (`backend/requirements.txt`):
-```
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
-sqlmodel==0.0.14
-sqlalchemy==2.0.23
-alembic==1.12.1
-psycopg2-binary==2.9.9
-python-multipart==0.0.6
-python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
-pydantic==2.5.0
-pydantic-settings==2.1.0
-python-dotenv==1.0.0
-email-validator==2.1.0
-jinja2==3.1.2
-aiofiles==23.2.1
-httpx==0.25.2
-redis==5.0.1
-celery==5.3.4
+# After (fixed):
+PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "DO \$\$BEGIN IF NOT EXISTS (SELECT FROM pg_catalog.pg_roles WHERE rolname = 'root') THEN CREATE ROLE root WITH LOGIN PASSWORD 'postgres'; END IF; END\$\$;" || true
 ```
 
-### Development Requirements (`requirements-dev.txt`):
-```
-pytest==7.4.3
-pytest-asyncio==0.21.1
-pytest-cov==4.1.0
-pytest-mock==3.12.0
-mypy==1.7.1
-black==23.11.0
-flake8==6.1.0
-isort==5.12.0
-pre-commit==3.5.0
-httpx==0.25.2
-faker==20.1.0
-```
+**Root Cause**: The dollar signs (`$$`) in the PostgreSQL function needed to be escaped as `\$\$` in the YAML file.
 
-## Import Fixes Applied
+### 3. ✅ ImportError in test_branching_logic.py
+**Problem**: `ImportError while importing test module 'backend/tests/test_branching_logic.py'`
 
-### Before:
+**Solution**: Fixed multiple import and function structure issues:
+
+#### 3.1 Fixed Import Statements
 ```python
-from backend.app.api.auth import get_current_user  # ❌ Incorrect
-from backend.app.auth import get_current_user      # ❌ Incorrect
+# Before (causing import errors):
+from backend.app.routers.tests import (
+    get_next_question, calculate_test_score, validate_branching_rules,
+    get_test_progress, should_show_question
+)
+
+# After (fixed):
+from backend.app.routers.tests import get_next_question, get_test_progress
 ```
 
-### After:
-```python
-from backend.app.deps import get_current_user      # ✅ Correct
-```
+#### 3.2 Moved Helper Functions to Top of File
+**Problem**: Test methods were calling functions (`should_show_question`, `calculate_test_score`, `validate_branching_rules`) that were defined at the bottom of the same file, causing `NameError`.
 
-## Testing Improvements
+**Solution**: Moved all helper functions to the top of the file, before the test fixtures and classes:
+- `should_show_question()`
+- `calculate_test_score()`
+- `validate_branching_rules()`
 
-- Added `test_disc_imports.py` to verify DISC module functionality
-- Tests cover import validation, basic functionality, and calculation logic
-- All tests are designed to work with the existing test infrastructure
+#### 3.3 Removed Duplicate Function Definitions
+**Problem**: Functions were defined both at the top (after moving) and at the bottom of the file.
 
-## Expected Results
+**Solution**: Removed duplicate function definitions from the bottom of the file.
 
-After these fixes, the CI pipeline should:
+## Files Modified
 
-1. ✅ Successfully find and install all required dependencies
-2. ✅ Import the FastAPI application without module errors
-3. ✅ Run all tests including the new DISC assessment tests
-4. ✅ Complete security audits and vulnerability checks
-5. ✅ Pass all existing functionality tests
+1. **`.github/workflows/ci.yml`**
+   - Fixed PostgreSQL role creation SQL command escaping
 
-## Files Modified/Created
+2. **`backend/tests/test_branching_logic.py`**
+   - Fixed import statements
+   - Moved helper functions to proper location
+   - Removed duplicate function definitions
 
-### Modified:
-- `backend/requirements.txt`
-- `requirements-dev.txt`
-- `backend/app/api/disc.py`
-- `backend/app/routers/gdpr.py`
+## Test Results
 
-### Created:
-- `backend/__init__.py`
-- `backend/app/api/__init__.py`
-- `backend/tests/test_disc_imports.py`
+All issues have been resolved:
+- ✅ Requirements files exist in correct locations
+- ✅ PostgreSQL role creation SQL is properly escaped
+- ✅ Test file imports and function definitions are properly structured
 
-## Verification
+The CI job should now run successfully without the reported errors.
 
-To verify the fixes work locally:
+## Additional Notes
 
-```bash
-# Install dependencies
-pip install -r backend/requirements.txt
-pip install -r requirements-dev.txt
-
-# Test imports
-python -c "from backend.app.main import app; print('✅ App import successful')"
-python -c "from backend.app.deps import get_current_user; print('✅ Auth import successful')"
-python -c "from backend.app.core.disc_assessment import DISCAssessment; print('✅ DISC import successful')"
-
-# Run tests
-cd backend && python -m pytest tests/test_disc_imports.py -v
-```
-
-The CI pipeline should now pass successfully with these fixes in place.
+- The test file follows proper Python naming conventions (uses underscores, not dashes)
+- All dependencies are properly listed in requirements files
+- The branching logic helper functions are now properly accessible to test methods
+- The PostgreSQL setup is compatible with the test environment
