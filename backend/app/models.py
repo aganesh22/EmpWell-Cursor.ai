@@ -79,3 +79,19 @@ class Response(SQLModel, table=True):
     value: int
 
     attempt: TestAttempt = Relationship(back_populates="responses")
+
+
+class ResourceType(str, enum.Enum):
+    article = "article"
+    video = "video"
+    course = "course"
+
+
+class Resource(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    title: str
+    description: Optional[str] = None
+    url: str
+    type: ResourceType = Field(default=ResourceType.article)
+    tags: Optional[str] = None  # comma separated
+    created_at: datetime = Field(default_factory=datetime.utcnow)

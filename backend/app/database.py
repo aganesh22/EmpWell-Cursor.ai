@@ -156,6 +156,18 @@ def init_db() -> None:
                 session.add(q); order += 1
             session.commit()
 
+        # Seed sample resources
+        from backend.app.models import Resource, ResourceType
+        if not session.exec(select(Resource)).first():
+            sample_resources = [
+                ("Mindfulness Basics", "Short article on starting mindfulness.", "https://example.com/mindfulness", ResourceType.article, "wellbeing,stress"),
+                ("Breathing Techniques", "Guided breathing exercise video.", "https://example.com/breathing", ResourceType.video, "stress"),
+                ("Time Management 101", "Free online course to improve planning.", "https://example.com/time", ResourceType.course, "productivity"),
+            ]
+            for title, desc, url, rtype, tags in sample_resources:
+                session.add(Resource(title=title, description=desc, url=url, type=rtype, tags=tags))
+            session.commit()
+
 
 def get_session() -> Session:  # Dependency for FastAPI routes
     with Session(engine) as session:

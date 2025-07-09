@@ -8,6 +8,7 @@ import Who5Test from "./Who5Test";
 import MBTITest from "./MBTITest";
 import DISCTest from "./DISCTest";
 import AdminAnalytics from "./AdminAnalytics";
+import ResourcesPage from "./Resources";
 
 export default function App() {
   return (
@@ -20,6 +21,7 @@ export default function App() {
       <Route path="/test/who5" element={<Who5Test />} />
       <Route path="/test/mbti" element={<MBTITest />} />
       <Route path="/test/disc" element={<DISCTest />} />
+      <Route path="/resources" element={<ResourcesPage />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

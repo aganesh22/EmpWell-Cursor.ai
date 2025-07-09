@@ -100,3 +100,6 @@ export function fetchAggregate(token: string, byDept = true, days = 180) {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+export interface Resource {id:number;title:string;description?:string;url:string;type:string;tags?:string;}
+export function listResources(token:string){return api.get<Resource[]>("/resources",{headers:{Authorization:`Bearer ${token}`}});}

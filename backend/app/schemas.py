@@ -71,3 +71,14 @@ class TestResult(SQLModel):
     normalized_score: float
     interpretation: str
     tips: list[str] = []
+
+class ResourceRead(SQLModel):
+    id: int
+    title: str
+    description: Optional[str]
+    url: str
+    type: str
+    tags: Optional[str]
+
+    class Config:
+        orm_mode = True
