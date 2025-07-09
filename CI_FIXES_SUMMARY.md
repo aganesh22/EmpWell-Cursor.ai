@@ -1,8 +1,38 @@
 # CI Job Fixes Summary
 
-## Issues Fixed
+## ✅ **PRIMARY ISSUE RESOLVED: SQLAlchemy Relationship Configuration**
 
-### 1. ✅ Backend Requirements Files
+### **Problem**: 
+The main cause of CI failures was a SQLAlchemy model configuration error:
+```
+sqlalchemy.exc.InvalidRequestError: When initializing mapper Mapper[User(user)], expression "relationship('List[UserConsent]')" seems to be using a generic class as the argument to relationship()
+```
+
+### **Root Cause**: 
+In `backend/app/models.py`, the User model had incorrectly defined relationships using direct class references instead of string references:
+
+```python
+# INCORRECT (causing the error):
+consents: List[UserConsent] = Relationship(back_populates="user")
+processing_logs: List[DataProcessingLog] = Relationship(back_populates="user")
+export_requests: List[DataExportRequest] = Relationship(back_populates="user")
+```
+
+### **Solution Applied**:
+Fixed the relationships to use string references for forward-declared models:
+
+```python
+# CORRECT:
+consents: List["UserConsent"] = Relationship(back_populates="user")
+processing_logs: List["DataProcessingLog"] = Relationship(back_populates="user")
+export_requests: List["DataExportRequest"] = Relationship(back_populates="user")
+```
+
+---
+
+## ✅ **Secondary Issues Fixed**
+
+### 1. **Backend Requirements Files**
 **Problem**: CI was looking for `backend/requirements.txt` and `requirements-dev.txt` files that were reported as missing.
 
 **Solution**: 
@@ -11,7 +41,7 @@
   - `requirements-dev.txt` (in root) ✓
 - No changes needed - files were already in the expected locations
 
-### 2. ✅ PostgreSQL Role Creation SQL
+### 2. **PostgreSQL Role Creation SQL**
 **Problem**: Malformed SQL command causing "trailing junk after numeric literal at or near '3142BEGIN'" error.
 
 **Solution**: Fixed the SQL command escaping in `.github/workflows/ci.yml`
@@ -25,7 +55,7 @@ PGPASSWORD=postgres psql -h localhost -U postgres -d postgres -c "DO \$\$BEGIN I
 
 **Root Cause**: The dollar signs (`$$`) in the PostgreSQL function needed to be escaped as `\$\$` in the YAML file.
 
-### 3. ✅ ImportError in test_branching_logic.py
+### 3. **ImportError in test_branching_logic.py**
 **Problem**: `ImportError while importing test module 'backend/tests/test_branching_logic.py'`
 
 **Solution**: Fixed multiple import and function structure issues:
@@ -55,28 +85,77 @@ from backend.app.routers.tests import get_next_question, get_test_progress
 
 **Solution**: Removed duplicate function definitions from the bottom of the file.
 
-## Files Modified
+---
 
-1. **`.github/workflows/ci.yml`**
+## **Files Modified**
+
+1. **`backend/app/models.py`** ⭐ (PRIMARY FIX)
+   - Fixed SQLAlchemy relationship definitions in User model
+   - Changed direct class references to string references
+
+2. **`.github/workflows/ci.yml`**
    - Fixed PostgreSQL role creation SQL command escaping
 
-2. **`backend/tests/test_branching_logic.py`**
+3. **`backend/tests/test_branching_logic.py`**
    - Fixed import statements
    - Moved helper functions to proper location
    - Removed duplicate function definitions
 
-## Test Results
+4. **`CI_FIXES_SUMMARY.md`**
+   - Documented all fixes and their rationale
 
-All issues have been resolved:
-- ✅ Requirements files exist in correct locations
-- ✅ PostgreSQL role creation SQL is properly escaped
-- ✅ Test file imports and function definitions are properly structured
+---
 
-The CI job should now run successfully without the reported errors.
+## **Impact Assessment**
 
-## Additional Notes
+### **Before Fixes**:
+- CI job failing with SQLAlchemy mapper initialization errors
+- Cascade of "One or more mappers failed to initialize" errors
+- Test import failures preventing test execution
+- PostgreSQL role creation errors (minor impact)
 
-- The test file follows proper Python naming conventions (uses underscores, not dashes)
-- All dependencies are properly listed in requirements files
-- The branching logic helper functions are now properly accessible to test methods
-- The PostgreSQL setup is compatible with the test environment
+### **After Fixes**:
+- ✅ SQLAlchemy models should initialize correctly
+- ✅ All relationships properly defined with string references
+- ✅ Test files should import successfully
+- ✅ PostgreSQL setup commands properly escaped
+- ✅ Test helper functions accessible to test methods
+
+---
+
+## **Test Configuration Notes**
+
+The test suite uses:
+- **SQLite in-memory database** for tests (not PostgreSQL)
+- **SQLModel** with **SQLAlchemy** relationships
+- **Pytest** with fixtures for database sessions
+- **FastAPI TestClient** for API testing
+
+The primary SQLAlchemy relationship fix resolves the core issue preventing model initialization, which was blocking all test execution.
+
+---
+
+## **Validation Steps**
+
+To verify the fixes work:
+
+1. **Test model imports**:
+   ```python
+   from backend.app.models import User, UserConsent, DataProcessingLog, DataExportRequest
+   ```
+
+2. **Test SQLAlchemy initialization**:
+   ```python
+   from sqlmodel import SQLModel, create_engine
+   from backend.app.models import User
+   
+   engine = create_engine("sqlite:///:memory:")
+   SQLModel.metadata.create_all(engine)
+   ```
+
+3. **Run specific tests**:
+   ```bash
+   cd backend && python -m pytest tests/test_branching_logic.py -v
+   ```
+
+The CI job should now run successfully without the reported SQLAlchemy mapper initialization errors.
