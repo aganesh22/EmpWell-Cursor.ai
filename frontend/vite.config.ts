@@ -5,5 +5,13 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    host: true,
+    strictPort: true,
+  },
+  define: {
+    global: "globalThis",
+  },
+  optimizeDeps: {
+    include: ["react", "react-dom"],
   },
 });
