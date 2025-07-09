@@ -45,9 +45,9 @@ class User(UserBase, table=True):
     deletion_scheduled_for: Optional[datetime] = None
 
     # Relationships
-    consents: List["UserConsent"] = Relationship(back_populates="user")
-    processing_logs: List["DataProcessingLog"] = Relationship(back_populates="user")
-    export_requests: List["DataExportRequest"] = Relationship(back_populates="user")
+    consents: list["UserConsent"] = Relationship(back_populates="user")
+    processing_logs: list["DataProcessingLog"] = Relationship(back_populates="user")
+    export_requests: list["DataExportRequest"] = Relationship(back_populates="user")
 
 
 # --- Token management (optional for future blacklisting / refresh) ---

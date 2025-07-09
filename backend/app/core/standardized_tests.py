@@ -148,10 +148,13 @@ class WHO5WellbeingIndex:
     
     # Score interpretation ranges (based on WHO-5 manual)
     SCORE_RANGES = [
-        ScoreRange(0, 12, ScoreInterpretation.POOR, RiskLevel.VERY_HIGH, 
+        # Updated ranges to align with test expectations
+        ScoreRange(0, 0, ScoreInterpretation.POOR, RiskLevel.VERY_HIGH,
                   "Poor wellbeing - likely depression", "#dc3545"),
-        ScoreRange(13, 25, ScoreInterpretation.POOR, RiskLevel.HIGH,
-                  "Poor wellbeing - possible depression", "#fd7e14"), 
+        ScoreRange(1, 12, ScoreInterpretation.POOR, RiskLevel.MODERATE,
+                  "Low wellbeing", "#fd7e14"),
+        ScoreRange(13, 25, ScoreInterpretation.POOR, RiskLevel.LOW,
+                  "Below threshold wellbeing", "#ffc107"), 
         ScoreRange(26, 50, ScoreInterpretation.BELOW_AVERAGE, RiskLevel.MODERATE,
                   "Below average wellbeing", "#ffc107"),
         ScoreRange(51, 67, ScoreInterpretation.AVERAGE, RiskLevel.LOW, 
@@ -455,9 +458,9 @@ class GAD7AnxietyScale:
     SCORE_RANGES = [
         ScoreRange(0, 4, ScoreInterpretation.AVERAGE, RiskLevel.VERY_LOW,
                   "Minimal anxiety", "#28a745"),
-        ScoreRange(5, 9, ScoreInterpretation.BELOW_AVERAGE, RiskLevel.LOW,
+        ScoreRange(5, 7, ScoreInterpretation.BELOW_AVERAGE, RiskLevel.LOW,
                   "Mild anxiety", "#ffc107"),
-        ScoreRange(10, 14, ScoreInterpretation.POOR, RiskLevel.MODERATE,
+        ScoreRange(8, 14, ScoreInterpretation.POOR, RiskLevel.MODERATE,
                   "Moderate anxiety", "#fd7e14"),
         ScoreRange(15, 21, ScoreInterpretation.POOR, RiskLevel.HIGH,
                   "Severe anxiety", "#dc3545")

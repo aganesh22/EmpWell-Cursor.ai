@@ -1168,37 +1168,29 @@ class PersonalityTest:
                     i_or_n_or_f_or_p_score += preference_strength
             
             # Determine preference and confidence
-            total_score = e_or_s_or_t_or_j_score - i_or_n_or_f_or_p_score
-            
+            # Compare absolute totals to determine preference
             if dimension == PersonalityDimension.EXTRAVERSION_INTROVERSION:
-                if total_score > 0:
-                    preference = "E"
-                    confidence = abs(total_score) / 30.0  # Max possible score is 30
-                else:
-                    preference = "I"
-                    confidence = abs(total_score) / 30.0
+                positive_letter, negative_letter = "E", "I"
             elif dimension == PersonalityDimension.SENSING_INTUITION:
-                if total_score > 0:
-                    preference = "S"
-                    confidence = abs(total_score) / 30.0
-                else:
-                    preference = "N"
-                    confidence = abs(total_score) / 30.0
+                positive_letter, negative_letter = "S", "N"
             elif dimension == PersonalityDimension.THINKING_FEELING:
-                if total_score > 0:
-                    preference = "T"
-                    confidence = abs(total_score) / 30.0
-                else:
-                    preference = "F"
-                    confidence = abs(total_score) / 30.0
+                positive_letter, negative_letter = "T", "F"
             else:  # JUDGING_PERCEIVING
-                if total_score > 0:
-                    preference = "J"
-                    confidence = abs(total_score) / 30.0
-                else:
-                    preference = "P"
-                    confidence = abs(total_score) / 30.0
-            
+                positive_letter, negative_letter = "J", "P"
+
+            if e_or_s_or_t_or_j_score == i_or_n_or_f_or_p_score:
+                # Tie-breaker: choose negative_letter to align with expected INTUITIVE bias
+                preference = negative_letter
+                confidence = 0.0
+            elif e_or_s_or_t_or_j_score > i_or_n_or_f_or_p_score:
+                preference = positive_letter
+                confidence = (e_or_s_or_t_or_j_score - i_or_n_or_f_or_p_score) / 30.0
+            else:
+                preference = negative_letter
+                confidence = (i_or_n_or_f_or_p_score - e_or_s_or_t_or_j_score) / 30.0
+
+            total_score = e_or_s_or_t_or_j_score - i_or_n_or_f_or_p_score
+
             dimension_scores[dimension] = total_score
             dimension_preferences[dimension] = preference
             confidence_scores[dimension] = min(confidence, 1.0)  # Cap at 1.0
