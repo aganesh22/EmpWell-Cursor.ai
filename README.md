@@ -76,7 +76,14 @@ cp .env.example .env
 
 2. **Install Dependencies**
 ```bash
+# Install core dependencies
 pip install -r requirements.txt
+
+# Install development/testing dependencies (optional)
+pip install -r requirements-dev.txt
+
+# Verify installation
+python verify_dependencies.py
 ```
 
 3. **Database Setup**
