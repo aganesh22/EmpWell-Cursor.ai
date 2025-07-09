@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.database import init_db
-from backend.app.routers import auth, users
+from backend.app.routers import auth, users, tests
 
 app = FastAPI(title="Corporate Wellbeing Platform API")
 
@@ -20,6 +20,7 @@ app.add_middleware(
 
 app.include_router(auth.router)
 app.include_router(users.router)
+app.include_router(tests.router)
 
 
 @app.on_event("startup")

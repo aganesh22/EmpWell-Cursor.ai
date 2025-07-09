@@ -60,3 +60,36 @@ export interface User {
 export function getMe(token: string) {
   return api.get<User>("/auth/me", { headers: { Authorization: `Bearer ${token}` } });
 }
+
+export interface Question {
+  id: number;
+  text: string;
+  order: number;
+  min_value: number;
+  max_value: number;
+}
+
+export interface TestTemplate {
+  key: string;
+  name: string;
+  description?: string;
+  questions: Question[];
+}
+
+export function listTests(token: string) {
+  return api.get<TestTemplate[]>("/tests", { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export function getTest(token: string, key: string) {
+  return api.get<TestTemplate>(`/tests/${key}`, { headers: { Authorization: `Bearer ${token}` } });
+}
+
+export interface TestResult {
+  raw_score: number;
+  normalized_score: number;
+  interpretation: string;
+}
+
+export function submitTest(token: string, key: string, answers: number[]) {
+  return api.post<TestResult>(`/tests/${key}/submit`, answers, { headers: { Authorization: `Bearer ${token}` } });
+}

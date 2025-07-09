@@ -4,6 +4,7 @@ import React from "react";
 import Login from "./Login";
 import Register from "./Register";
 import AdminDashboard from "./AdminDashboard";
+import Who5Test from "./Who5Test";
 
 export default function App() {
   return (
@@ -12,6 +13,7 @@ export default function App() {
       <Route path="/login" element={<Login />} />
       <Route path="/register" element={<Register />} />
       <Route path="/admin" element={<AdminDashboard />} />
+      <Route path="/test/who5" element={<Who5Test />} />
       <Route path="*" element={<Navigate to="/" />} />
     </Routes>
   );

@@ -44,3 +44,27 @@ class UserStatusUpdate(SQLModel):
 
 class PasswordReset(SQLModel):
     password: str
+
+class QuestionRead(SQLModel):
+    id: int
+    text: str
+    order: int
+    min_value: int
+    max_value: int
+
+    class Config:
+        orm_mode = True
+
+class TestTemplateRead(SQLModel):
+    key: str
+    name: str
+    description: Optional[str]
+    questions: list[QuestionRead]
+
+    class Config:
+        orm_mode = True
+
+class TestResult(SQLModel):
+    raw_score: float
+    normalized_score: float
+    interpretation: str

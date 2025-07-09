@@ -30,3 +30,46 @@ class RevokedToken(SQLModel, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
     jti: str = Field(index=True, unique=True)
     revoked_at: datetime = Field(default_factory=datetime.utcnow)
+
+
+# --- Test Engine models ---
+
+class TestTemplate(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    key: str = Field(index=True, unique=True)
+    name: str
+    description: Optional[str] = None
+
+    questions: list["Question"] = Relationship(back_populates="template")
+
+
+class Question(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    template_id: int = Field(foreign_key="testtemplate.id")
+    text: str
+    order: int
+    min_value: int = 0
+    max_value: int = 5
+    weight: float = 1.0
+
+    template: TestTemplate = Relationship(back_populates="questions")
+
+
+class TestAttempt(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    template_id: int = Field(foreign_key="testtemplate.id")
+    user_id: int = Field(foreign_key="user.id")
+    created_at: datetime = Field(default_factory=datetime.utcnow)
+    raw_score: Optional[float] = None
+    normalized_score: Optional[float] = None
+
+    responses: list["Response"] = Relationship(back_populates="attempt")
+
+
+class Response(SQLModel, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
+    attempt_id: int = Field(foreign_key="testattempt.id")
+    question_id: int = Field(foreign_key="question.id")
+    value: int
+
+    attempt: TestAttempt = Relationship(back_populates="responses")

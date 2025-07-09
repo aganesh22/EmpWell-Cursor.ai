@@ -17,6 +17,30 @@ def init_db() -> None:
 
     SQLModel.metadata.create_all(bind=engine)
 
+    # Seed WHO-5 Wellbeing Index if not present
+    from sqlmodel import Session, select
+    from backend.app.models import TestTemplate, Question
+
+    with Session(engine) as session:
+        exists_stmt = select(TestTemplate).where(TestTemplate.key == "who5")
+        if not session.exec(exists_stmt).first():
+            template = TestTemplate(key="who5", name="WHO-5 Wellbeing Index", description="Measure current mental wellbeing (last 2 weeks)")
+            session.add(template)
+            session.commit()
+            session.refresh(template)
+
+            questions_text = [
+                "I have felt cheerful and in good spirits",
+                "I have felt calm and relaxed",
+                "I have felt active and vigorous",
+                "I woke up feeling fresh and rested",
+                "My daily life has been filled with things that interest me",
+            ]
+            for index, text in enumerate(questions_text, start=1):
+                q = Question(template_id=template.id, text=text, order=index)
+                session.add(q)
+            session.commit()
+
 
 def get_session() -> Session:  # Dependency for FastAPI routes
     with Session(engine) as session:
