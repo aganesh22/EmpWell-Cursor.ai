@@ -8,6 +8,12 @@ on:
 jobs:
   build-test:
     runs-on: ubuntu-latest
+    
+    env:
+      DATABASE_URL: postgresql+psycopg2://postgres:postgres@localhost:5432/postgres
+      SECRET_KEY: test-secret-key-for-ci
+      GOOGLE_CLIENT_ID: fake-google-client-id-for-testing
+    
     services:
       postgres:
         image: postgres:16-alpine
@@ -30,38 +36,41 @@ jobs:
         with:
           python-version: '3.11'
           
+      - name: Cache pip dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements*.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-pip-
+          
       - name: Install system dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y postgresql-client
+          sudo apt-get update -qq
+          sudo apt-get install -y postgresql-client libpq-dev
           
       - name: Install Python dependencies
         run: |
-          pip install --upgrade pip
+          python -m pip install --upgrade pip setuptools wheel
           pip install -r backend/requirements.txt
           pip install -r requirements-dev.txt
           
-      - name: Set environment variables
-        run: |
-          echo "DATABASE_URL=postgresql+psycopg2://postgres:postgres@localhost:5432/postgres" >> $GITHUB_ENV
-          echo "SECRET_KEY=test-secret-key" >> $GITHUB_ENV
-          
       - name: Wait for PostgreSQL
         run: |
-          until pg_isready -h localhost -p 5432 -U postgres; do
-            echo "Waiting for postgres..."
-            sleep 2
-          done
+          timeout 60s bash -c 'until pg_isready -h localhost -p 5432 -U postgres; do sleep 2; done'
           
       - name: Run tests
         run: |
-          cd backend
-          python -m pytest tests/ -v
+          python -m pytest backend/tests/ -v --tb=short
+        working-directory: .
           
       - name: Run security scan
         run: |
+          bandit -r backend/app -ll -f json -o bandit-report.json || true
           bandit -r backend/app -ll
+        continue-on-error: false
           
       - name: Check for vulnerabilities
         run: |
-          safety check --file backend/requirements.txt
+          safety check --file backend/requirements.txt --output text
+        continue-on-error: false
