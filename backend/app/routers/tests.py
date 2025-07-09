@@ -1,4 +1,4 @@
-THIS SHOULD BE A LINTER ERRORfrom __future__ import annotations
+from __future__ import annotations
 
 from typing import List, Dict, Any
 import json
@@ -30,6 +30,7 @@ from backend.app.core.standardized_tests import (
 )
 
 router = APIRouter(prefix="/tests", tags=["tests"])
+logger = logging.getLogger(__name__)
 
 # Enhanced test library with comprehensive assessments
 COMPREHENSIVE_TEST_LIBRARY = {
