@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from backend.app.database import init_db
 from backend.app.routers import auth, users, tests, reports, resources, notifications, gdpr
-from backend.app.api import disc
+from backend.app.api import disc, who5
 
 app = FastAPI(title="Corporate Wellbeing Platform API")
 
@@ -27,6 +27,7 @@ app.include_router(resources.router)
 app.include_router(notifications.router)
 app.include_router(gdpr.router)
 app.include_router(disc.router)
+app.include_router(who5.router)
 
 
 @app.on_event("startup")
