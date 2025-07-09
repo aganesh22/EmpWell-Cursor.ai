@@ -49,14 +49,42 @@ def init_db() -> None:
             session.commit(); session.refresh(t)
 
             mbti_questions = [
-                ("You prefer to recharge alone after social events.", "IE", "I"),
-                ("You gain energy from being the center of attention.", "IE", "E"),
-                ("You focus on concrete details rather than abstract ideas.", "SN", "S"),
-                ("You are imaginative rather than realistic.", "SN", "N"),
-                ("You prioritize logic over feelings when making decisions.", "TF", "T"),
-                ("You value empathy over analytical thinking.", "TF", "F"),
-                ("You like to have matters settled in advance.", "JP", "J"),
-                ("You prefer to keep options open.", "JP", "P"),
+                # I–E (8)
+                ("I feel drained after extended socializing.", "IE", "I"),
+                ("I speak up easily in large groups.", "IE", "E"),
+                ("I prefer solitary activities to group ones.", "IE", "I"),
+                ("Being around people energizes me.", "IE", "E"),
+                ("I need quiet time to reflect on my thoughts.", "IE", "I"),
+                ("I enjoy being the life of the party.", "IE", "E"),
+                ("I find small talk exhausting.", "IE", "I"),
+                ("I often start conversations with strangers.", "IE", "E"),
+                # S–N (8)
+                ("I trust facts more than ideas.", "SN", "S"),
+                ("I enjoy brainstorming possibilities.", "SN", "N"),
+                ("I notice details others miss.", "SN", "S"),
+                ("I like to imagine future scenarios.", "SN", "N"),
+                ("I prefer practical solutions to theoretical ones.", "SN", "S"),
+                ("I'm drawn to abstract concepts.", "SN", "N"),
+                ("I focus on current realities rather than possibilities.", "SN", "S"),
+                ("I interpret patterns and meanings in events.", "SN", "N"),
+                # T–F (8)
+                ("I believe justice is more important than mercy.", "TF", "T"),
+                ("I consider people's feelings before decisions.", "TF", "F"),
+                ("Logical analysis comes naturally to me.", "TF", "T"),
+                ("Maintaining harmony guides my actions.", "TF", "F"),
+                ("I enjoy solving problems with objective criteria.", "TF", "T"),
+                ("I empathize with others' emotions easily.", "TF", "F"),
+                ("I value consistency over compassion.", "TF", "T"),
+                ("I prioritize relationships over tasks.", "TF", "F"),
+                # J–P (8)
+                ("I like to have a detailed schedule.", "JP", "J"),
+                ("I keep my options open until the last moment.", "JP", "P"),
+                ("Planning ahead gives me comfort.", "JP", "J"),
+                ("I'm spontaneous and flexible with plans.", "JP", "P"),
+                ("I finish tasks before relaxing.", "JP", "J"),
+                ("I work best close to deadlines.", "JP", "P"),
+                ("I feel uneasy without clear closure.", "JP", "J"),
+                ("I enjoy adapting to unexpected situations.", "JP", "P"),
             ]
             order = 1
             for text, pair, pos in mbti_questions:
@@ -81,10 +109,38 @@ def init_db() -> None:
             session.commit(); session.refresh(t)
 
             disc_questions = [
-                ("I enjoy taking charge and achieving goals.", "D", "D"),
-                ("I am enthusiastic and like persuading others.", "I", "I"),
-                ("I am patient and a good listener.", "S", "S"),
-                ("I pay attention to accuracy and details.", "C", "C"),
+                # Dominance 7
+                ("I take charge in group situations.", "D", "D"),
+                ("I enjoy competitive environments.", "D", "D"),
+                ("I make quick decisions with confidence.", "D", "D"),
+                ("I challenge obstacles head-on.", "D", "D"),
+                ("I set ambitious goals for myself.", "D", "D"),
+                ("I assert my opinions strongly.", "D", "D"),
+                ("I thrive under pressure to achieve results.", "D", "D"),
+                # Influence 7
+                ("I enjoy networking with new people.", "I", "I"),
+                ("I motivate others with enthusiasm.", "I", "I"),
+                ("I have a persuasive communication style.", "I", "I"),
+                ("I maintain an upbeat attitude.", "I", "I"),
+                ("I enjoy being recognized publicly.", "I", "I"),
+                ("I inspire team spirit in groups.", "I", "I"),
+                ("I prefer collaborative over solitary work.", "I", "I"),
+                # Steadiness 7
+                ("I am patient even under stress.", "S", "S"),
+                ("I value harmony in relationships.", "S", "S"),
+                ("I am a good listener.", "S", "S"),
+                ("I provide stable support to others.", "S", "S"),
+                ("I prefer consistent routines.", "S", "S"),
+                ("I remain calm in difficult situations.", "S", "S"),
+                ("I am loyal to my team.", "S", "S"),
+                # Conscientiousness 7
+                ("I double-check details for accuracy.", "C", "C"),
+                ("I follow established rules carefully.", "C", "C"),
+                ("I prefer clear procedures and standards.", "C", "C"),
+                ("I analyze information before acting.", "C", "C"),
+                ("I strive for high quality in my work.", "C", "C"),
+                ("I ask clarifying questions to avoid errors.", "C", "C"),
+                ("I organize data systematically.", "C", "C"),
             ]
             order = 1
             for text, pair, pos in disc_questions:
