@@ -13,6 +13,12 @@ from backend.app.database import get_session
 from backend.app.deps import get_current_user
 from backend.app.models import TestTemplate, Question, TestAttempt, Response
 from backend.app.schemas import TestTemplateRead, TestResult
+from backend.app.core.branching import (
+    create_branching_controller,
+    create_rules_processor,
+    create_score_calculator,
+    create_progress_tracker
+)
 
 router = APIRouter(prefix="/tests", tags=["tests"])
 
@@ -389,32 +395,43 @@ def submit_test(key: str, answers: List[int],
     session.commit()
     session.refresh(attempt)
 
-    raw_score = 0.0
-    answer_map: dict[int, int] = {}
-    for idx, q in enumerate(questions):
-        # Branching: if question has condition
-        if q.show_if_question_id and q.show_if_value is not None:
-            prev_val = answer_map.get(q.show_if_question_id)
-            if prev_val != q.show_if_value:
-                continue  # skip question
+    # Use branching logic for question evaluation
+    controller = create_branching_controller(session)
+    visible_questions = controller.get_visible_questions(template.id, [])
+    
+    if len(answers) > len(visible_questions):
+        raise HTTPException(status_code=400, detail="Too many answers supplied")
 
-        if idx >= len(answers):
-            raise HTTPException(status_code=400, detail="Missing answers for required questions")
-        val = answers[idx]
-
-        if not (q.min_value <= val <= q.max_value):
+    # Process answers with branching logic
+    for idx, answer in enumerate(answers):
+        if idx >= len(visible_questions):
+            break
+            
+        question = visible_questions[idx]
+        
+        if not (question.min_value <= answer <= question.max_value):
             raise HTTPException(status_code=400, detail="Answer value out of range")
 
-        raw_score += val * q.weight
-        answer_map[q.id] = val
-        session.add(Response(attempt_id=attempt.id, question_id=q.id, value=val))
+        # Save response
+        response = Response(attempt_id=attempt.id, question_id=question.id, value=answer)
+        session.add(response)
+        session.commit()
+        
+        # Update visible questions after each answer (for branching)
+        all_responses = session.exec(
+            select(Response).where(Response.attempt_id == attempt.id)
+        ).all()
+        visible_questions = controller.get_visible_questions(template.id, all_responses)
+
+    # Calculate final score using branching score calculator
+    score_calculator = create_score_calculator(session)
+    raw_score, normalized_score = score_calculator.calculate_test_score(attempt.id)
 
     # Legacy scoring for backward compatibility
     if key == "who5":
-        normalized = raw_score * 4  # 0-100
-        if normalized < 50:
+        if normalized_score < 50:
             interp = "Low wellbeing (possible depression)"
-        elif normalized < 75:
+        elif normalized_score < 75:
             interp = "Moderate wellbeing"
         else:
             interp = "High wellbeing"
@@ -425,14 +442,25 @@ def submit_test(key: str, answers: List[int],
         ]
 
         attempt.raw_score = raw_score
-        attempt.normalized_score = normalized
+        attempt.normalized_score = normalized_score
         attempt.interpretation = interp
         session.add(attempt)
         session.commit()
-        return TestResult(raw_score=raw_score, normalized_score=normalized, interpretation=interp, tips=tips)
+        return TestResult(raw_score=raw_score, normalized_score=normalized_score, interpretation=interp, tips=tips)
 
     else:
-        raise HTTPException(status_code=400, detail="Scoring not implemented for this test")
+        # For other tests, use the calculated scores
+        attempt.raw_score = raw_score
+        attempt.normalized_score = normalized_score
+        attempt.interpretation = "Score calculated using branching logic"
+        session.add(attempt)
+        session.commit()
+        return TestResult(
+            raw_score=raw_score,
+            normalized_score=normalized_score,
+            interpretation="Score calculated using branching logic",
+            tips=["Review your responses and consider areas for improvement."]
+        )
 
 
 @router.get("/categories/{category}")
@@ -456,6 +484,330 @@ def search_tests(query: str):
             query_lower in test.get("key", "").lower())
     ]
     return matching_tests
+
+
+# New Branching Logic Endpoints
+
+@router.post("/{key}/start", response_model=Dict[str, Any])
+def start_test_attempt(
+    key: str,
+    user=Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """Start a new test attempt with branching support"""
+    # Check if test exists in comprehensive library
+    if key in COMPREHENSIVE_TEST_LIBRARY:
+        test_config = COMPREHENSIVE_TEST_LIBRARY[key]
+        
+        # Create or get template
+        template = session.exec(select(TestTemplate).where(TestTemplate.key == key)).first()
+        if not template:
+            template = TestTemplate(
+                key=key,
+                name=test_config["name"],
+                description=test_config.get("description", "")
+            )
+            session.add(template)
+            session.commit()
+            session.refresh(template)
+        
+        # Create new attempt
+        attempt = TestAttempt(
+            template_id=template.id,
+            user_id=user.id
+        )
+        session.add(attempt)
+        session.commit()
+        session.refresh(attempt)
+        
+        return {
+            "attempt_id": attempt.id,
+            "template_key": key,
+            "template_name": test_config["name"],
+            "branching_enabled": test_config.get("branching_enabled", False)
+        }
+    
+    # Fallback to legacy database templates
+    template = session.exec(select(TestTemplate).where(TestTemplate.key == key)).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Test not found")
+    
+    attempt = TestAttempt(template_id=template.id, user_id=user.id)
+    session.add(attempt)
+    session.commit()
+    session.refresh(attempt)
+    
+    return {
+        "attempt_id": attempt.id,
+        "template_key": key,
+        "template_name": template.name,
+        "branching_enabled": True  # Assume database templates support branching
+    }
+
+
+@router.get("/{key}/question", response_model=Dict[str, Any])
+def get_next_question(
+    key: str,
+    user=Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """Get the next question in a test attempt using branching logic"""
+    # Get the user's current attempt for this test
+    template = session.exec(select(TestTemplate).where(TestTemplate.key == key)).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Test not found")
+    
+    current_attempt = session.exec(
+        select(TestAttempt)
+        .where(TestAttempt.template_id == template.id)
+        .where(TestAttempt.user_id == user.id)
+        .order_by(TestAttempt.created_at.desc())
+    ).first()
+    
+    if not current_attempt:
+        raise HTTPException(status_code=404, detail="No active test attempt found. Please start the test first.")
+    
+    # Use branching controller to get next question
+    controller = create_branching_controller(session)
+    next_question = controller.get_next_question(current_attempt.id)
+    
+    if not next_question:
+        raise HTTPException(status_code=404, detail="Test completed")
+    
+    # Get progress information
+    progress_tracker = create_progress_tracker(session)
+    progress = progress_tracker.get_test_progress(current_attempt.id)
+    
+    return {
+        "id": next_question.id,
+        "text": next_question.text,
+        "order": next_question.order,
+        "min_value": next_question.min_value,
+        "max_value": next_question.max_value,
+        "required": True,
+        "progress": progress,
+        "is_conditional": next_question.show_if_question_id is not None
+    }
+
+
+@router.post("/{key}/answer", response_model=Dict[str, Any])
+def submit_answer(
+    key: str,
+    answer_data: Dict[str, Any],
+    user=Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """Submit an answer for the current question"""
+    question_id = answer_data.get("question_id")
+    value = answer_data.get("value")
+    
+    if question_id is None or value is None:
+        raise HTTPException(status_code=400, detail="question_id and value are required")
+    
+    # Get the user's current attempt
+    template = session.exec(select(TestTemplate).where(TestTemplate.key == key)).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Test not found")
+    
+    current_attempt = session.exec(
+        select(TestAttempt)
+        .where(TestAttempt.template_id == template.id)
+        .where(TestAttempt.user_id == user.id)
+        .order_by(TestAttempt.created_at.desc())
+    ).first()
+    
+    if not current_attempt:
+        raise HTTPException(status_code=404, detail="No active test attempt found")
+    
+    # Validate the question exists and the value is in range
+    question = session.get(Question, question_id)
+    if not question:
+        raise HTTPException(status_code=404, detail="Question not found")
+    
+    if not (question.min_value <= value <= question.max_value):
+        raise HTTPException(status_code=400, detail="Answer value out of range")
+    
+    # Check if this question was already answered (prevent duplicates)
+    existing_response = session.exec(
+        select(Response)
+        .where(Response.attempt_id == current_attempt.id)
+        .where(Response.question_id == question_id)
+    ).first()
+    
+    if existing_response:
+        # Update existing response
+        existing_response.value = value
+        session.add(existing_response)
+    else:
+        # Create new response
+        response = Response(
+            attempt_id=current_attempt.id,
+            question_id=question_id,
+            value=value
+        )
+        session.add(response)
+    
+    session.commit()
+    
+    # Get next question using branching logic
+    controller = create_branching_controller(session)
+    next_question = controller.get_next_question(current_attempt.id)
+    
+    # Get updated progress
+    progress_tracker = create_progress_tracker(session)
+    progress = progress_tracker.get_test_progress(current_attempt.id)
+    
+    response_data = {
+        "answer_recorded": True,
+        "progress": progress,
+        "test_complete": next_question is None
+    }
+    
+    if next_question:
+        response_data["next_question"] = {
+            "id": next_question.id,
+            "text": next_question.text,
+            "order": next_question.order,
+            "min_value": next_question.min_value,
+            "max_value": next_question.max_value
+        }
+    
+    return response_data
+
+
+@router.get("/{key}/results", response_model=Dict[str, Any])
+def get_test_results(
+    key: str,
+    user=Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """Get results for a completed test with branching logic"""
+    # Get the user's most recent completed attempt
+    template = session.exec(select(TestTemplate).where(TestTemplate.key == key)).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Test not found")
+    
+    current_attempt = session.exec(
+        select(TestAttempt)
+        .where(TestAttempt.template_id == template.id)
+        .where(TestAttempt.user_id == user.id)
+        .order_by(TestAttempt.created_at.desc())
+    ).first()
+    
+    if not current_attempt:
+        raise HTTPException(status_code=404, detail="No test attempt found")
+    
+    # Check if test is complete
+    controller = create_branching_controller(session)
+    next_question = controller.get_next_question(current_attempt.id)
+    
+    if next_question is not None:
+        raise HTTPException(status_code=400, detail="Test not yet completed")
+    
+    # Calculate scores using branching logic
+    score_calculator = create_score_calculator(session)
+    raw_score, normalized_score = score_calculator.calculate_test_score(current_attempt.id)
+    
+    # Calculate dimensional scores if applicable
+    dimensional_scores = score_calculator.calculate_dimensional_scores(current_attempt.id)
+    
+    # Get question path taken
+    progress_tracker = create_progress_tracker(session)
+    question_path = progress_tracker.get_question_path(current_attempt.id)
+    
+    # Update attempt with calculated scores
+    current_attempt.raw_score = raw_score
+    current_attempt.normalized_score = normalized_score
+    
+    # Generate interpretation
+    interpretation = "Score calculated"
+    if key in COMPREHENSIVE_TEST_LIBRARY:
+        test_config = COMPREHENSIVE_TEST_LIBRARY[key]
+        interpretation_guide = test_config.get("interpretation_guide", {})
+        
+        for score_range in interpretation_guide.get("score_ranges", []):
+            if score_range["min_score"] <= normalized_score <= score_range["max_score"]:
+                interpretation = score_range["label"]
+                break
+    
+    current_attempt.interpretation = interpretation
+    session.add(current_attempt)
+    session.commit()
+    
+    return {
+        "attempt_id": current_attempt.id,
+        "raw_score": raw_score,
+        "normalized_score": normalized_score,
+        "interpretation": interpretation,
+        "dimensional_scores": dimensional_scores,
+        "question_path": question_path,
+        "total_questions_answered": len(question_path),
+        "test_completed_at": current_attempt.created_at.isoformat()
+    }
+
+
+@router.get("/{key}/progress", response_model=Dict[str, Any])
+def get_test_progress(
+    key: str,
+    user=Depends(get_current_user),
+    session: Session = Depends(get_session)
+):
+    """Get current progress for an ongoing test"""
+    template = session.exec(select(TestTemplate).where(TestTemplate.key == key)).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Test not found")
+    
+    current_attempt = session.exec(
+        select(TestAttempt)
+        .where(TestAttempt.template_id == template.id)
+        .where(TestAttempt.user_id == user.id)
+        .order_by(TestAttempt.created_at.desc())
+    ).first()
+    
+    if not current_attempt:
+        raise HTTPException(status_code=404, detail="No active test attempt found")
+    
+    progress_tracker = create_progress_tracker(session)
+    progress = progress_tracker.get_test_progress(current_attempt.id)
+    
+    return progress
+
+
+@router.get("/{key}/validate", response_model=Dict[str, Any])
+def validate_test_branching(
+    key: str,
+    session: Session = Depends(get_session)
+):
+    """Validate the branching rules for a test template"""
+    template = session.exec(select(TestTemplate).where(TestTemplate.key == key)).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Test not found")
+    
+    rules_processor = create_rules_processor(session)
+    is_valid, errors = rules_processor.validate_branching_rules(template.id)
+    
+    return {
+        "template_key": key,
+        "is_valid": is_valid,
+        "errors": errors,
+        "validation_timestamp": "2024-01-01T00:00:00Z"  # Current timestamp would go here
+    }
+
+
+@router.get("/{key}/branching-tree", response_model=Dict[str, Any])
+def get_branching_tree(
+    key: str,
+    session: Session = Depends(get_session)
+):
+    """Get the branching tree structure for a test"""
+    template = session.exec(select(TestTemplate).where(TestTemplate.key == key)).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Test not found")
+    
+    rules_processor = create_rules_processor(session)
+    tree = rules_processor.get_branching_tree(template.id)
+    
+    return tree
 
 
 # Keep existing PDF report generation
