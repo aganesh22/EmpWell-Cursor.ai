@@ -5,8 +5,7 @@ from datetime import datetime
 from typing import Optional, List
 from enum import Enum
 
-from sqlmodel import Field, SQLModel
-from sqlalchemy.orm import Mapped, relationship
+from sqlmodel import Field, SQLModel, Relationship
 
 
 class Role(str, enum.Enum):
@@ -46,9 +45,9 @@ class User(UserBase, table=True):
     deletion_scheduled_for: Optional[datetime] = None
 
     # Relationships
-    consents: Mapped[List["UserConsent"]] = relationship(back_populates="user")
-    processing_logs: Mapped[List["DataProcessingLog"]] = relationship(back_populates="user")
-    export_requests: Mapped[List["DataExportRequest"]] = relationship(back_populates="user")
+    consents: List["UserConsent"] = Relationship(back_populates="user")
+    processing_logs: List["DataProcessingLog"] = Relationship(back_populates="user")
+    export_requests: List["DataExportRequest"] = Relationship(back_populates="user")
 
 
 # --- Token management (optional for future blacklisting / refresh) ---
@@ -66,7 +65,7 @@ class TestTemplate(SQLModel, table=True):
     name: str
     description: Optional[str] = None
 
-    questions: Mapped[List["Question"]] = relationship(back_populates="template")
+    questions: List["Question"] = Relationship(back_populates="template")
 
 
 class Question(SQLModel, table=True):
@@ -82,7 +81,7 @@ class Question(SQLModel, table=True):
     show_if_question_id: Optional[int] = Field(default=None, foreign_key="question.id")
     show_if_value: Optional[int] = None
 
-    template: Mapped["TestTemplate"] = relationship(back_populates="questions")
+    template: "TestTemplate" = Relationship(back_populates="questions")
 
 
 class TestAttempt(SQLModel, table=True):
@@ -105,7 +104,7 @@ class TestAttempt(SQLModel, table=True):
     anonymized_user_hash: Optional[str] = None  # Hash for linking anonymized records
     department_hash: Optional[str] = None  # Anonymized department identifier
 
-    responses: Mapped[List["Response"]] = relationship(back_populates="attempt")
+    responses: List["Response"] = Relationship(back_populates="attempt")
 
 
 class Response(SQLModel, table=True):
@@ -114,7 +113,7 @@ class Response(SQLModel, table=True):
     question_id: int = Field(foreign_key="question.id")
     value: int
 
-    attempt: Mapped["TestAttempt"] = relationship(back_populates="responses")
+    attempt: "TestAttempt" = Relationship(back_populates="responses")
 
 
 class ResourceType(str, enum.Enum):
@@ -151,7 +150,7 @@ class UserConsent(SQLModel, table=True):
     version: str = "1.0"  # Consent version for tracking changes
 
     # Relationships
-    user: Mapped[Optional["User"]] = relationship(back_populates="consents")
+    user: Optional["User"] = Relationship(back_populates="consents")
 
 class DataProcessingLog(SQLModel, table=True):
     """Audit trail for data processing activities (GDPR Article 30)"""
@@ -167,7 +166,7 @@ class DataProcessingLog(SQLModel, table=True):
     created_by: Optional[int] = Field(foreign_key="user.id")
 
     # Relationships
-    user: Mapped[Optional["User"]] = relationship(back_populates="processing_logs")
+    user: Optional["User"] = Relationship(back_populates="processing_logs")
 
 class DataRetentionPolicy(SQLModel, table=True):
     """Define data retention policies for different data types"""
@@ -194,6 +193,6 @@ class DataExportRequest(SQLModel, table=True):
     notes: Optional[str] = None
 
     # Relationships
-    user: Mapped[Optional["User"]] = relationship(back_populates="export_requests")
+    user: Optional["User"] = Relationship(back_populates="export_requests")
 
 
