@@ -6,7 +6,12 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg2://postgres:postgres@db:5432/postgres")
+# Use a lightweight SQLite database by default if no DATABASE_URL is provided. This avoids requiring
+# external database drivers (e.g., psycopg2) during local development and testing environments where
+# such dependencies may be unavailable.
+# NOTE: Production deployments should still override DATABASE_URL with the appropriate connection
+# string for PostgreSQL or another RDBMS.
+DATABASE_URL = os.getenv("DATABASE_URL", "sqlite:///./app.db")
 
 engine = create_engine(DATABASE_URL, echo=False)
 

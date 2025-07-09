@@ -20,7 +20,7 @@ from fastapi.responses import FileResponse
 from sqlmodel import Session, select
 
 from backend.app.database import get_session
-from backend.app.auth import get_current_user
+from backend.app.deps import get_current_user
 from backend.app.models import (
     User, UserConsent, DataExportRequest, DataProcessingLog, 
     TestAttempt, Response, ConsentType
