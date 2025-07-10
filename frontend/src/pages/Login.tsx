@@ -126,79 +126,103 @@ export default function Login() {
   }
 
   return (
-    <main style={{ maxWidth: 400, margin: "2rem auto" }}>
-      <h2>Login</h2>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>Email</label>
-          <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} />
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-bg-primary to-bg-secondary">
+      <main className="card max-w-md w-full mx-4 fade-in">
+        <div className="text-center mb-8">
+          <h2 className="text-3xl font-bold mb-2">Welcome Back</h2>
+          <p className="text-secondary">Sign in to your account</p>
         </div>
-        <div style={{ marginTop: 12 }}>
-          <label>Password</label>
-          <input type="password" required value={password} onChange={(e) => setPassword(e.target.value)} />
-        </div>
-        <button type="submit" disabled={mutation.isPending} style={{ marginTop: 16 }}>
-          {mutation.isPending ? "Logging in..." : "Login"}
-        </button>
-      </form>
-      {mutation.isError && <p style={{ color: "red" }}>Invalid credentials</p>}
-      {googleMutation.isError && <p style={{ color: "red" }}>Google sign-in failed</p>}
-      {azureMutation.isError && <p style={{ color: "red" }}>Azure AD sign-in failed</p>}
-      
-      <div style={{ marginTop: 20, textAlign: 'center' }}>
-        <div style={{ margin: '16px 0', fontSize: '14px', color: '#666' }}>or sign in with</div>
         
-        <div style={{ display: 'flex', gap: '12px', justifyContent: 'center', flexWrap: 'wrap' }}>
-          {/* Google Sign-In */}
-          <div ref={googleButtonRef} style={{ minHeight: '40px' }}>
-            {isGoogleLoading && <p style={{ margin: 0, padding: '8px' }}>Signing in with Google...</p>}
+        <form onSubmit={handleSubmit} className="mb-6">
+          <div className="form-group">
+            <label className="form-label">Email Address</label>
+            <input 
+              type="email" 
+              required 
+              value={email} 
+              onChange={(e) => setEmail(e.target.value)}
+              className="form-input"
+              placeholder="Enter your email"
+            />
           </div>
+          <div className="form-group">
+            <label className="form-label">Password</label>
+            <input 
+              type="password" 
+              required 
+              value={password} 
+              onChange={(e) => setPassword(e.target.value)}
+              className="form-input"
+              placeholder="Enter your password"
+            />
+          </div>
+          <button type="submit" disabled={mutation.isPending} className="btn btn-primary w-full">
+            {mutation.isPending ? (
+              <>
+                <div className="loading-spinner"></div>
+                Signing in...
+              </>
+            ) : (
+              "Sign In"
+            )}
+          </button>
+        </form>
+        
+        {mutation.isError && <p className="text-error mb-4 text-center">Invalid credentials</p>}
+        {googleMutation.isError && <p className="text-error mb-4 text-center">Google sign-in failed</p>}
+        {azureMutation.isError && <p className="text-error mb-4 text-center">Azure AD sign-in failed</p>}
+        
+        <div className="text-center">
+          <div className="text-sm text-muted mb-4">or sign in with</div>
           
-          {/* Azure AD Sign-In */}
-          {AzureAuth.getInstance().isConfigured() && (
-            <button
-              onClick={async () => {
-                setIsAzureLoading(true);
-                try {
-                  await AzureAuth.getInstance().loginPopup();
-                } catch (error) {
-                  setIsAzureLoading(false);
-                  console.error('Azure login failed:', error);
-                }
-              }}
-              disabled={isAzureLoading}
-              style={{
-                padding: '8px 16px',
-                border: '1px solid #0078d4',
-                borderRadius: '4px',
-                backgroundColor: '#0078d4',
-                color: 'white',
-                cursor: 'pointer',
-                fontSize: '14px',
-                fontWeight: '500',
-                minWidth: '160px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '8px'
-              }}
-            >
-              {isAzureLoading ? (
-                'Signing in...'
-              ) : (
-                <>
-                  <span>🏢</span>
-                  <span>Sign in with Microsoft</span>
-                </>
+          <div className="flex gap-3 justify-center flex-wrap">
+            {/* Google Sign-In */}
+            <div ref={googleButtonRef} className="min-h-10">
+              {isGoogleLoading && (
+                <div className="flex items-center gap-2 p-2 text-sm">
+                  <div className="loading-spinner"></div>
+                  Signing in with Google...
+                </div>
               )}
-            </button>
-          )}
+            </div>
+            
+            {/* Azure AD Sign-In */}
+            {AzureAuth.getInstance().isConfigured() && (
+              <button
+                onClick={async () => {
+                  setIsAzureLoading(true);
+                  try {
+                    await AzureAuth.getInstance().loginPopup();
+                  } catch (error) {
+                    setIsAzureLoading(false);
+                    console.error('Azure login failed:', error);
+                  }
+                }}
+                disabled={isAzureLoading}
+                className="btn btn-outline btn-sm"
+              >
+                {isAzureLoading ? (
+                  <>
+                    <div className="loading-spinner"></div>
+                    Signing in...
+                  </>
+                ) : (
+                  <>
+                    <span>🏢</span>
+                    <span>Sign in with Microsoft</span>
+                  </>
+                )}
+              </button>
+            )}
+          </div>
         </div>
-      </div>
-      
-      <p style={{ marginTop: 16 }}>
-        Don't have an account? <Link to="/register">Register</Link>
-      </p>
-    </main>
+        
+        <div className="text-center mt-6 pt-6 border-t border-primary">
+          <p className="text-secondary mb-0">
+            Don't have an account? <Link to="/register" className="text-accent-primary hover:text-accent-primary-hover">Create one</Link>
+          </p>
+        </div>
+      </main>
+    </div>
   );
 }
