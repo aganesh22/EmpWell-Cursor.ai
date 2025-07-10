@@ -20,7 +20,7 @@ export default function ThemeToggle() {
         width: 48,
         height: 48,
         borderRadius: '50%',
-        background: 'var(--color-primary)',
+        background: 'var(--accent-primary)',
         color: '#fff',
         border: 'none',
         fontSize: 20,
