@@ -10,10 +10,154 @@ from sqlmodel import Session, select
 from fastapi.testclient import TestClient
 
 from backend.app.models import TestTemplate, Question, TestAttempt, Response, User
-from backend.app.routers.tests import (
-    get_next_question, calculate_test_score, validate_branching_rules,
-    get_test_progress, should_show_question
-)
+from backend.app.routers.tests import get_next_question, get_test_progress
+
+
+# Helper functions for branching logic
+def should_show_question(question: Question, previous_responses: list, session: Session) -> bool:
+    """
+    Determine if a question should be shown based on branching conditions.
+    
+    Args:
+        question: The question to evaluate
+        previous_responses: List of previous responses in this attempt
+        session: Database session
+        
+    Returns:
+        True if question should be shown, False otherwise
+    """
+    if question.show_if_question_id is None:
+        return True  # No condition, always show
+    
+    # Find the response for the conditional question
+    conditional_response = None
+    for response in previous_responses:
+        if response.question_id == question.show_if_question_id:
+            conditional_response = response
+            break
+    
+    if conditional_response is None:
+        return False  # Conditional question not answered yet
+    
+    # Check if condition is met
+    if question.show_if_value is not None:
+        if question.show_if_value <= 3:  # Assuming <= comparison for low values
+            return conditional_response.value <= question.show_if_value
+        else:  # >= comparison for high values
+            return conditional_response.value >= question.show_if_value
+    
+    return True
+
+
+def calculate_test_score(attempt_id: int, session: Session) -> tuple[float, float]:
+    """
+    Calculate the raw and normalized scores for a test attempt.
+    
+    Args:
+        attempt_id: The test attempt ID
+        session: Database session
+        
+    Returns:
+        Tuple of (raw_score, normalized_score)
+    """
+    # Get attempt and responses
+    attempt = session.get(TestAttempt, attempt_id)
+    responses = session.exec(
+        select(Response).where(Response.attempt_id == attempt_id)
+    ).all()
+    
+    if not responses:
+        return 0.0, 0.0
+    
+    # Get questions to access weights
+    question_ids = [r.question_id for r in responses]
+    questions = session.exec(
+        select(Question).where(Question.id.in_(question_ids))
+    ).all()
+    
+    question_map = {q.id: q for q in questions}
+    
+    # Calculate weighted score
+    total_weighted_score = 0.0
+    total_weight = 0.0
+    
+    for response in responses:
+        question = question_map.get(response.question_id)
+        if question:
+            # Normalize response value to 0-1 scale
+            normalized_value = (response.value - question.min_value) / (question.max_value - question.min_value)
+            weighted_value = normalized_value * question.weight
+            
+            total_weighted_score += weighted_value
+            total_weight += question.weight
+    
+    raw_score = total_weighted_score
+    normalized_score = (total_weighted_score / total_weight * 100) if total_weight > 0 else 0.0
+    
+    return raw_score, normalized_score
+
+
+def validate_branching_rules(template_id: int, session: Session) -> tuple[bool, list[str]]:
+    """
+    Validate the branching rules for a test template.
+    
+    Args:
+        template_id: The test template ID
+        session: Database session
+        
+    Returns:
+        Tuple of (is_valid, list_of_errors)
+    """
+    errors = []
+    
+    # Get all questions for this template
+    questions = session.exec(
+        select(Question).where(Question.template_id == template_id)
+    ).all()
+    
+    question_map = {q.id: q for q in questions}
+    
+    # Check for circular dependencies
+    def has_circular_dependency(question_id: int, visited: set, recursion_stack: set) -> bool:
+        if question_id in recursion_stack:
+            return True
+        
+        if question_id in visited:
+            return False
+        
+        visited.add(question_id)
+        recursion_stack.add(question_id)
+        
+        question = question_map.get(question_id)
+        if question and question.show_if_question_id:
+            if has_circular_dependency(question.show_if_question_id, visited, recursion_stack):
+                return True
+        
+        recursion_stack.remove(question_id)
+        return False
+    
+    visited = set()
+    for question in questions:
+        if question.id not in visited:
+            if has_circular_dependency(question.id, visited, set()):
+                errors.append(f"Circular dependency detected involving question {question.id}")
+    
+    # Check for invalid references
+    for question in questions:
+        if question.show_if_question_id is not None:
+            if question.show_if_question_id not in question_map:
+                errors.append(f"Question {question.id} references non-existent question {question.show_if_question_id}")
+    
+    # Check for logical inconsistencies
+    for question in questions:
+        if question.show_if_question_id is not None and question.show_if_value is not None:
+            ref_question = question_map.get(question.show_if_question_id)
+            if ref_question:
+                if (question.show_if_value < ref_question.min_value or 
+                    question.show_if_value > ref_question.max_value):
+                    errors.append(f"Question {question.id} has invalid condition value {question.show_if_value} for referenced question range [{ref_question.min_value}, {ref_question.max_value}]")
+    
+    return len(errors) == 0, errors
 
 
 @pytest.fixture
@@ -605,240 +749,3 @@ class TestBranchingLogic:
             assert "interpretation" in results
 
 
-# Helper functions for branching logic (these should be moved to the main tests router)
-
-def should_show_question(question: Question, previous_responses: list, session: Session) -> bool:
-    """
-    Determine if a question should be shown based on branching conditions.
-    
-    Args:
-        question: The question to evaluate
-        previous_responses: List of previous responses in this attempt
-        session: Database session
-        
-    Returns:
-        True if question should be shown, False otherwise
-    """
-    if question.show_if_question_id is None:
-        return True  # No condition, always show
-    
-    # Find the response for the conditional question
-    conditional_response = None
-    for response in previous_responses:
-        if response.question_id == question.show_if_question_id:
-            conditional_response = response
-            break
-    
-    if conditional_response is None:
-        return False  # Conditional question not answered yet
-    
-    # Check if condition is met
-    if question.show_if_value is not None:
-        if question.show_if_value <= 3:  # Assuming <= comparison for low values
-            return conditional_response.value <= question.show_if_value
-        else:  # >= comparison for high values
-            return conditional_response.value >= question.show_if_value
-    
-    return True
-
-
-def get_next_question(attempt_id: int, session: Session) -> Question:
-    """
-    Get the next question to show in a test attempt, considering branching logic.
-    
-    Args:
-        attempt_id: The test attempt ID
-        session: Database session
-        
-    Returns:
-        Next question to show, or None if test is complete
-    """
-    # Get the attempt and template
-    attempt = session.get(TestAttempt, attempt_id)
-    if not attempt:
-        return None
-    
-    # Get all questions for this template, ordered by order
-    all_questions = session.exec(
-        select(Question)
-        .where(Question.template_id == attempt.template_id)
-        .order_by(Question.order)
-    ).all()
-    
-    # Get existing responses
-    existing_responses = session.exec(
-        select(Response).where(Response.attempt_id == attempt_id)
-    ).all()
-    
-    answered_question_ids = {r.question_id for r in existing_responses}
-    
-    # Find next question to show
-    for question in all_questions:
-        if question.id in answered_question_ids:
-            continue  # Already answered
-        
-        if should_show_question(question, existing_responses, session):
-            return question
-    
-    return None  # No more questions
-
-
-def calculate_test_score(attempt_id: int, session: Session) -> tuple[float, float]:
-    """
-    Calculate the raw and normalized scores for a test attempt.
-    
-    Args:
-        attempt_id: The test attempt ID
-        session: Database session
-        
-    Returns:
-        Tuple of (raw_score, normalized_score)
-    """
-    # Get attempt and responses
-    attempt = session.get(TestAttempt, attempt_id)
-    responses = session.exec(
-        select(Response).where(Response.attempt_id == attempt_id)
-    ).all()
-    
-    if not responses:
-        return 0.0, 0.0
-    
-    # Get questions to access weights
-    question_ids = [r.question_id for r in responses]
-    questions = session.exec(
-        select(Question).where(Question.id.in_(question_ids))
-    ).all()
-    
-    question_map = {q.id: q for q in questions}
-    
-    # Calculate weighted score
-    total_weighted_score = 0.0
-    total_weight = 0.0
-    
-    for response in responses:
-        question = question_map.get(response.question_id)
-        if question:
-            # Normalize response value to 0-1 scale
-            normalized_value = (response.value - question.min_value) / (question.max_value - question.min_value)
-            weighted_value = normalized_value * question.weight
-            
-            total_weighted_score += weighted_value
-            total_weight += question.weight
-    
-    raw_score = total_weighted_score
-    normalized_score = (total_weighted_score / total_weight * 100) if total_weight > 0 else 0.0
-    
-    return raw_score, normalized_score
-
-
-def get_test_progress(attempt_id: int, session: Session) -> dict:
-    """
-    Calculate test progress accounting for skipped questions due to branching.
-    
-    Args:
-        attempt_id: The test attempt ID
-        session: Database session
-        
-    Returns:
-        Dictionary with progress information
-    """
-    attempt = session.get(TestAttempt, attempt_id)
-    if not attempt:
-        return {"percentage": 0, "answered_count": 0, "total_questions": 0}
-    
-    # Get all responses so far
-    responses = session.exec(
-        select(Response).where(Response.attempt_id == attempt_id)
-    ).all()
-    
-    # Get all questions for this template
-    all_questions = session.exec(
-        select(Question)
-        .where(Question.template_id == attempt.template_id)
-        .order_by(Question.order)
-    ).all()
-    
-    # Count questions that should be shown based on current responses
-    shown_questions = 0
-    answered_questions = len(responses)
-    
-    for question in all_questions:
-        if should_show_question(question, responses, session):
-            shown_questions += 1
-    
-    # Calculate remaining questions that might be shown
-    remaining_questions = shown_questions - answered_questions
-    
-    # Estimate total questions (this is approximate due to branching)
-    estimated_total = answered_questions + remaining_questions + 1  # +1 for current question
-    
-    percentage = (answered_questions / estimated_total * 100) if estimated_total > 0 else 0
-    
-    return {
-        "percentage": min(percentage, 100),
-        "answered_count": answered_questions,
-        "total_questions": estimated_total
-    }
-
-
-def validate_branching_rules(template_id: int, session: Session) -> tuple[bool, list[str]]:
-    """
-    Validate the branching rules for a test template.
-    
-    Args:
-        template_id: The test template ID
-        session: Database session
-        
-    Returns:
-        Tuple of (is_valid, list_of_errors)
-    """
-    errors = []
-    
-    # Get all questions for this template
-    questions = session.exec(
-        select(Question).where(Question.template_id == template_id)
-    ).all()
-    
-    question_map = {q.id: q for q in questions}
-    
-    # Check for circular dependencies
-    def has_circular_dependency(question_id: int, visited: set, recursion_stack: set) -> bool:
-        if question_id in recursion_stack:
-            return True
-        
-        if question_id in visited:
-            return False
-        
-        visited.add(question_id)
-        recursion_stack.add(question_id)
-        
-        question = question_map.get(question_id)
-        if question and question.show_if_question_id:
-            if has_circular_dependency(question.show_if_question_id, visited, recursion_stack):
-                return True
-        
-        recursion_stack.remove(question_id)
-        return False
-    
-    visited = set()
-    for question in questions:
-        if question.id not in visited:
-            if has_circular_dependency(question.id, visited, set()):
-                errors.append(f"Circular dependency detected involving question {question.id}")
-    
-    # Check for invalid references
-    for question in questions:
-        if question.show_if_question_id is not None:
-            if question.show_if_question_id not in question_map:
-                errors.append(f"Question {question.id} references non-existent question {question.show_if_question_id}")
-    
-    # Check for logical inconsistencies
-    for question in questions:
-        if question.show_if_question_id is not None and question.show_if_value is not None:
-            ref_question = question_map.get(question.show_if_question_id)
-            if ref_question:
-                if (question.show_if_value < ref_question.min_value or 
-                    question.show_if_value > ref_question.max_value):
-                    errors.append(f"Question {question.id} has invalid condition value {question.show_if_value} for referenced question range [{ref_question.min_value}, {ref_question.max_value}]")
-    
-    return len(errors) == 0, errors
