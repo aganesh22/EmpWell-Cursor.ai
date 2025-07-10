@@ -10,154 +10,55 @@ from sqlmodel import Session, select
 from fastapi.testclient import TestClient
 
 from backend.app.models import TestTemplate, Question, TestAttempt, Response, User
-from backend.app.routers.tests import get_next_question, get_test_progress
+from backend.app.core.branching import (
+    create_branching_controller,
+    create_rules_processor,
+    create_score_calculator,
+    create_progress_tracker,
+)
 
 
-# Helper functions for branching logic
-def should_show_question(question: Question, previous_responses: list, session: Session) -> bool:
-    """
-    Determine if a question should be shown based on branching conditions.
-    
-    Args:
-        question: The question to evaluate
-        previous_responses: List of previous responses in this attempt
-        session: Database session
-        
-    Returns:
-        True if question should be shown, False otherwise
-    """
-    if question.show_if_question_id is None:
-        return True  # No condition, always show
-    
-    # Find the response for the conditional question
-    conditional_response = None
-    for response in previous_responses:
-        if response.question_id == question.show_if_question_id:
-            conditional_response = response
-            break
-    
-    if conditional_response is None:
-        return False  # Conditional question not answered yet
-    
-    # Check if condition is met
-    if question.show_if_value is not None:
-        if question.show_if_value <= 3:  # Assuming <= comparison for low values
-            return conditional_response.value <= question.show_if_value
-        else:  # >= comparison for high values
-            return conditional_response.value >= question.show_if_value
-    
-    return True
+# ---------------------------------------------------------------------------
+# Modern wrappers using the shared branching helpers
+# These override earlier standalone implementations and ensure the tests use
+# the canonical logic from backend.app.core.branching.
+# ---------------------------------------------------------------------------
 
 
-def calculate_test_score(attempt_id: int, session: Session) -> tuple[float, float]:
-    """
-    Calculate the raw and normalized scores for a test attempt.
-    
-    Args:
-        attempt_id: The test attempt ID
-        session: Database session
-        
-    Returns:
-        Tuple of (raw_score, normalized_score)
-    """
-    # Get attempt and responses
-    attempt = session.get(TestAttempt, attempt_id)
-    responses = session.exec(
-        select(Response).where(Response.attempt_id == attempt_id)
-    ).all()
-    
-    if not responses:
-        return 0.0, 0.0
-    
-    # Get questions to access weights
-    question_ids = [r.question_id for r in responses]
-    questions = session.exec(
-        select(Question).where(Question.id.in_(question_ids))
-    ).all()
-    
-    question_map = {q.id: q for q in questions}
-    
-    # Calculate weighted score
-    total_weighted_score = 0.0
-    total_weight = 0.0
-    
-    for response in responses:
-        question = question_map.get(response.question_id)
-        if question:
-            # Normalize response value to 0-1 scale
-            normalized_value = (response.value - question.min_value) / (question.max_value - question.min_value)
-            weighted_value = normalized_value * question.weight
-            
-            total_weighted_score += weighted_value
-            total_weight += question.weight
-    
-    raw_score = total_weighted_score
-    normalized_score = (total_weighted_score / total_weight * 100) if total_weight > 0 else 0.0
-    
-    return raw_score, normalized_score
+def should_show_question(
+    question: Question, previous_responses: list, session: Session
+) -> bool:  # type: ignore[override]
+    """Delegate to QuestionDisplayController.should_show_question."""
+    controller = create_branching_controller(session)
+    return controller.should_show_question(question, previous_responses)
 
 
-def validate_branching_rules(template_id: int, session: Session) -> tuple[bool, list[str]]:
-    """
-    Validate the branching rules for a test template.
-    
-    Args:
-        template_id: The test template ID
-        session: Database session
-        
-    Returns:
-        Tuple of (is_valid, list_of_errors)
-    """
-    errors = []
-    
-    # Get all questions for this template
-    questions = session.exec(
-        select(Question).where(Question.template_id == template_id)
-    ).all()
-    
-    question_map = {q.id: q for q in questions}
-    
-    # Check for circular dependencies
-    def has_circular_dependency(question_id: int, visited: set, recursion_stack: set) -> bool:
-        if question_id in recursion_stack:
-            return True
-        
-        if question_id in visited:
-            return False
-        
-        visited.add(question_id)
-        recursion_stack.add(question_id)
-        
-        question = question_map.get(question_id)
-        if question and question.show_if_question_id:
-            if has_circular_dependency(question.show_if_question_id, visited, recursion_stack):
-                return True
-        
-        recursion_stack.remove(question_id)
-        return False
-    
-    visited = set()
-    for question in questions:
-        if question.id not in visited:
-            if has_circular_dependency(question.id, visited, set()):
-                errors.append(f"Circular dependency detected involving question {question.id}")
-    
-    # Check for invalid references
-    for question in questions:
-        if question.show_if_question_id is not None:
-            if question.show_if_question_id not in question_map:
-                errors.append(f"Question {question.id} references non-existent question {question.show_if_question_id}")
-    
-    # Check for logical inconsistencies
-    for question in questions:
-        if question.show_if_question_id is not None and question.show_if_value is not None:
-            ref_question = question_map.get(question.show_if_question_id)
-            if ref_question:
-                if (question.show_if_value < ref_question.min_value or 
-                    question.show_if_value > ref_question.max_value):
-                    errors.append(f"Question {question.id} has invalid condition value {question.show_if_value} for referenced question range [{ref_question.min_value}, {ref_question.max_value}]")
-    
-    return len(errors) == 0, errors
+def get_next_question(attempt_id: int, session: Session):  # type: ignore[override]
+    """Delegate to QuestionDisplayController.get_next_question."""
+    controller = create_branching_controller(session)
+    return controller.get_next_question(attempt_id)
+
+
+def calculate_test_score(  # type: ignore[override]
+    attempt_id: int, session: Session
+):
+    """Delegate to BranchingScoreCalculator.calculate_test_score."""
+    calculator = create_score_calculator(session)
+    return calculator.calculate_test_score(attempt_id)
+
+
+def get_test_progress(attempt_id: int, session: Session):  # type: ignore[override]
+    """Delegate to BranchingProgressTracker.get_test_progress."""
+    tracker = create_progress_tracker(session)
+    return tracker.get_test_progress(attempt_id)
+
+
+def validate_branching_rules(  # type: ignore[override]
+    template_id: int, session: Session
+):
+    """Delegate to BranchingRulesProcessor.validate_branching_rules."""
+    processor = create_rules_processor(session)
+    return processor.validate_branching_rules(template_id)
 
 
 @pytest.fixture
